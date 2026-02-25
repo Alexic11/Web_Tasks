@@ -15,8 +15,8 @@ export type ComponentDefinitionProperties = Record<string, any[] | Record<string
 export type ComponentDefinition = {
     tag?: string;
     className?: string;
-    props?: ComponentDefinitionProperties;
-    children?: Array<ComponentDefinition | string>;
+    props: ComponentDefinitionProperties;
+    children: Array<ComponentDefinition | string>;
     reactImports?: Record<string, string>;
     javaClass?: string;
     metadata?: any;

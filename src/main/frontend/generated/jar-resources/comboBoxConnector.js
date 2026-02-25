@@ -89,7 +89,7 @@ window.Vaadin.Flow.comboBoxConnector.initLazy = (comboBox) => {
     if (filterChanged) {
       cache = {};
       lastFilter = params.filter;
-      comboBox._filterDebouncer = Debouncer.debounce(comboBox._filterDebouncer, timeOut.after(500), () => {
+      this._filterDebouncer = Debouncer.debounce(this._filterDebouncer, timeOut.after(500), () => {
         if (serverFacade.getLastFilterSentToServer() === params.filter) {
           // Fixes the case when the filter changes
           // to something else and back to the original value
@@ -102,7 +102,7 @@ window.Vaadin.Flow.comboBoxConnector.initLazy = (comboBox) => {
         }
         // Remove the debouncer before clearing page callbacks.
         // This makes sure that they are executed.
-        comboBox._filterDebouncer = undefined;
+        this._filterDebouncer = undefined;
         // Call the method again after debounce.
         clearPageCallbacks();
         comboBox.dataProvider(params, callback);
@@ -112,7 +112,7 @@ window.Vaadin.Flow.comboBoxConnector.initLazy = (comboBox) => {
 
     // Postpone the execution of new callbacks if there is an active debouncer.
     // They will be executed when the page callbacks are cleared within the debouncer.
-    if (comboBox._filterDebouncer) {
+    if (this._filterDebouncer) {
       pageCallbacks[params.page] = callback;
       return;
     }
@@ -211,13 +211,6 @@ window.Vaadin.Flow.comboBoxConnector.initLazy = (comboBox) => {
   };
 
   comboBox.$connector.reset = function () {
-    // Cancel pending requests, as clearCache below will set the combo
-    // in a state where it will always request new data, regardless
-    // what is in the cache already.
-    if (comboBox._filterDebouncer) {
-      comboBox._filterDebouncer.cancel();
-      comboBox._filterDebouncer = undefined;
-    }
     clearPageCallbacks();
     cache = {};
     comboBox.clearCache();

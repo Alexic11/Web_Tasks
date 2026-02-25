@@ -1,5 +1,5 @@
-import { aA as a, az as i } from "./copilot/copilot-Dx9oBOgD.js";
+import { ax as a, aw as i } from "./copilot/copilot-B2WMxP-w.js";
 export {
-  a as createChildrenDefinitions,
-  i as registerImporter
+  a as _createChildrenDefinitions,
+  i as _registerImporter
 };

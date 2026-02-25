@@ -50,7 +50,7 @@ export type ImportMetadata = {
  *
  * ```typescript
  * import type { ComponentDefinition, FigmaNode } from 'Frontend/generated/jar-resources/copilot.js';
- * import { registerImporter } from 'Frontend/generated/jar-resources/copilot.js';
+ * import { _registerImporter } from 'Frontend/generated/jar-resources/copilot.js';
  *
  * function acmeCardImporter(node: FigmaNode): ComponentDefinition | undefined {
  *   if (node.properties.type === 'AcmeCard') {
@@ -69,7 +69,7 @@ export type ImportMetadata = {
  *   }
  * }
  *
- * registerImporter(acmeCardImporter);
+ * _registerImporter(acmeCardImporter);
  * ```
  * If you only want to support either Java or React, you can omit the `javaClass` or `reactImports` property respectively.
  *
@@ -88,7 +88,7 @@ export type ImportMetadata = {
  *
  * @param importer the importer to register
  */
-export declare function registerImporter(importer: Importer): void;
+export declare function _registerImporter(importer: Importer): void;
 export declare function _registerInternalImporter(importer: Importer): void;
 export declare function _getImporters(): Importer[];
 export declare function _getIcon(node: FigmaNode, enablerKey: string, iconKey: string, slot?: string | undefined): ComponentDefinition | undefined;
@@ -99,4 +99,4 @@ export declare function renderNode(node: FigmaNode, metadata: ImportMetadata, cu
 export declare function findChild(node: FigmaNode, matcher: (node: FigmaNode) => boolean): FigmaNode | undefined;
 export declare function findFirstChild(node: FigmaNode, name: string): FigmaNode | undefined;
 export declare function findAllChildren(node: FigmaNode, matcher: (node: FigmaNode) => boolean): FigmaNode[];
-export declare function createChildrenDefinitions(node: FigmaNode, metadata: ImportMetadata, matcher: (n: FigmaNode) => boolean): ComponentDefinition[];
+export declare function _createChildrenDefinitions(node: FigmaNode, metadata: ImportMetadata, matcher: (n: FigmaNode) => boolean): ComponentDefinition[];
