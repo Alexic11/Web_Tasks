@@ -5,8 +5,11 @@ import carobnifrulas.web_tasks.user.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 public class BoardMemberService {
@@ -19,11 +22,22 @@ public class BoardMemberService {
         this.users = users;
     }
 
+    private boolean isGlobalAdmin(Long userId) {
+        return users.findById(userId)
+                .map(u -> "admin@local".equalsIgnoreCase(u.getEmail()))
+                .orElse(false);
+    }
+
     public BoardRole getRole(Long boardId, Long userId) {
+        if (isGlobalAdmin(userId)) {
+            return BoardRole.ADMIN; // ili OWNER ako želiš da ima full UI kontrole
+        }
+
         return members.findByIdBoardIdAndIdUserId(boardId, userId)
                 .map(bm -> BoardRole.valueOf(bm.getRole()))
                 .orElseThrow(() -> new IllegalStateException("User is not member of board."));
     }
+
 
     public boolean isMember(Long boardId, Long userId) {
         return members.existsByIdBoardIdAndIdUserId(boardId, userId);
@@ -110,5 +124,43 @@ public class BoardMemberService {
     public void requireMember(Long boardId, Long userId) {
         members.findByIdBoardIdAndIdUserId(boardId, userId)
                 .orElseThrow(() -> new IllegalStateException("Korisnik nije član ovog boarda."));
+    }
+
+
+    public List<User> listUsersNotInBoard(Long boardId) {
+
+        Set<Long> memberIds = members.findAllByIdBoardId(boardId).stream()
+                .map(bm -> bm.getId().getUserId())
+                .collect(Collectors.toSet());
+
+        return users.findAll().stream()
+                // ❌ isključi system admin
+                .filter(u -> !"admin@local".equalsIgnoreCase(u.getEmail()))
+                // ❌ isključi već dodane članove
+                .filter(u -> !memberIds.contains(u.getId()))
+                .sorted(Comparator.comparing(User::getFullName, String.CASE_INSENSITIVE_ORDER))
+                .toList();
+    }
+
+
+    @Transactional
+    public void addMemberByUserId(Long boardId, Long actorUserId, Long targetUserId, BoardRole role) {
+        requireManageMembers(boardId, actorUserId);
+
+        if (role == BoardRole.OWNER) {
+            throw new IllegalStateException("Ne možeš dodati OWNER preko UI.");
+        }
+
+        User u = users.findById(targetUserId)
+                .orElseThrow(() -> new IllegalStateException("Korisnik ne postoji."));
+
+        if (members.existsByIdBoardIdAndIdUserId(boardId, u.getId())) {
+            throw new IllegalStateException("Korisnik je već član boarda.");
+        }
+
+        BoardMember bm = new BoardMember();
+        bm.setId(new BoardMemberId(boardId, u.getId()));
+        bm.setRole(role.name());
+        members.save(bm);
     }
 }

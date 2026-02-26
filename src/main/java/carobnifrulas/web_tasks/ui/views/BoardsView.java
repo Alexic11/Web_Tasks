@@ -47,9 +47,10 @@ public class BoardsView extends View implements MenuTab {
     }
 
     private void refresh() {
-        List<Board> boards = services.boardService.findBoardsForUser(loggedUser.getId());
+        List<Board> boards = services.boardService.listBoardsFor(loggedUser);
         grid.setItems(boards);
     }
+
 
     private void openCreateDialog() {
         Dialog d = new Dialog();

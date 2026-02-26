@@ -3,27 +3,31 @@ package carobnifrulas.web_tasks.ui.views;
 import carobnifrulas.web_tasks.board.BoardMemberRepository;
 import carobnifrulas.web_tasks.board.BoardRole;
 import carobnifrulas.web_tasks.services.ServicesHolder;
-import com.vaadin.flow.component.Component;   // ✅ OVO TI FALI
+import carobnifrulas.web_tasks.user.User;
+
+import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.html.H4;
+import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.orderedlayout.FlexComponent;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.select.Select;
-import com.vaadin.flow.component.textfield.TextField;
 
 public class BoardMembersDialog extends Dialog {
 
     private final Long boardId;
     private final Long actorUserId;
+    private final ServicesHolder services;
+
+    private ComboBox<User> userBox;
 
     private final Grid<BoardMemberRepository.MemberRow> grid =
             new Grid<>(BoardMemberRepository.MemberRow.class, false);
-
-    private final ServicesHolder services;
 
     public BoardMembersDialog(Long boardId, Long actorUserId, ServicesHolder services) {
         this.boardId = boardId;
@@ -40,9 +44,12 @@ public class BoardMembersDialog extends Dialog {
     }
 
     private Component buildTop() {
-        TextField email = new TextField("Email");
-        email.setPlaceholder("npr. neko@firma.com");
-        email.setWidth("320px");
+        userBox = new ComboBox<>("Korisnik");
+        userBox.setPlaceholder("Odaberi korisnika...");
+        userBox.setWidth("360px");
+        userBox.setClearButtonVisible(true);
+        userBox.setItemLabelGenerator(u -> u.getFullName() + " (" + u.getEmail() + ")");
+        userBox.setItems(services.boardMemberService.listUsersNotInBoard(boardId));
 
         Select<BoardRole> role = new Select<>();
         role.setLabel("Rola");
@@ -52,8 +59,19 @@ public class BoardMembersDialog extends Dialog {
 
         Button add = new Button("Dodaj", e -> {
             try {
-                services.boardMemberService.addMember(boardId, actorUserId, email.getValue(), role.getValue());
-                email.clear();
+                if (userBox.getValue() == null) {
+                    Notification.show("Odaberi korisnika.");
+                    return;
+                }
+
+                services.boardMemberService.addMemberByUserId(
+                        boardId,
+                        actorUserId,
+                        userBox.getValue().getId(),
+                        role.getValue()
+                );
+
+                userBox.clear();
                 role.setValue(BoardRole.MEMBER);
                 refresh();
                 Notification.show("Dodato.");
@@ -62,7 +80,7 @@ public class BoardMembersDialog extends Dialog {
             }
         });
 
-        HorizontalLayout row = new HorizontalLayout(email, role, add);
+        HorizontalLayout row = new HorizontalLayout(userBox, role, add);
         row.setDefaultVerticalComponentAlignment(FlexComponent.Alignment.END);
         row.setWidthFull();
 
@@ -87,7 +105,7 @@ public class BoardMembersDialog extends Dialog {
         grid.addComponentColumn(r -> {
             BoardRole current = BoardRole.valueOf(r.getRole());
             if (current == BoardRole.OWNER) {
-                return new com.vaadin.flow.component.html.Span("—");
+                return new Span("—");
             }
 
             Select<BoardRole> sel = new Select<>();
@@ -110,7 +128,7 @@ public class BoardMembersDialog extends Dialog {
         grid.addComponentColumn(r -> {
             BoardRole current = BoardRole.valueOf(r.getRole());
             if (current == BoardRole.OWNER) {
-                return new com.vaadin.flow.component.html.Span("");
+                return new Span("");
             }
 
             Button remove = new Button("Ukloni", e -> {
@@ -135,5 +153,8 @@ public class BoardMembersDialog extends Dialog {
 
     private void refresh() {
         grid.setItems(services.boardMemberService.listMemberRows(boardId));
+        if (userBox != null) {
+            userBox.setItems(services.boardMemberService.listUsersNotInBoard(boardId));
+        }
     }
 }

@@ -46,4 +46,43 @@ public interface CardRepository extends JpaRepository<Card, Long> {
             order by c.updatedAt desc
             """)
     List<MyTaskRow> findMyTasks(Long userId);
+
+
+    public interface TaskRow {
+        Long getCardId();
+        String getTitle();
+        java.time.LocalDateTime getDueAt();
+
+        Long getBoardId();
+        String getBoardName();
+
+        Long getListId();
+        String getListTitle();
+
+        Long getAssigneeId();
+        String getAssigneeName();
+        String getAssigneeEmail();
+    }
+
+    @org.springframework.data.jpa.repository.Query("""
+    select
+      c.id as cardId,
+      c.title as title,
+      c.dueAt as dueAt,
+      b.id as boardId,
+      b.name as boardName,
+      l.id as listId,
+      l.title as listTitle,
+      u.id as assigneeId,
+      u.fullName as assigneeName,
+      u.email as assigneeEmail
+    from Card c
+      join ListEntity l on l.id = c.listId
+      join Board b on b.id = c.boardId
+      left join User u on u.id = c.assignedTo
+    where (:assigneeId is null or c.assignedTo = :assigneeId)
+""")
+    java.util.List<TaskRow> findTaskRows(Long assigneeId);
+
+
 }

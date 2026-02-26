@@ -85,4 +85,10 @@ public class AppUserService {
     }
 
     public record CreatedUserResult(User user, String tempPassword) {}
+
+
+    public java.util.Optional<User> findById(Long userId) {
+        return users.findById(userId);
+    }
+
 }

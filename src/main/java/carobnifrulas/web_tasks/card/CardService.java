@@ -2,6 +2,8 @@ package carobnifrulas.web_tasks.card;
 
 import carobnifrulas.web_tasks.board.BoardMemberService;
 import carobnifrulas.web_tasks.list.ListService;
+import carobnifrulas.web_tasks.services.ServicesHolder;
+import carobnifrulas.web_tasks.user.User;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,6 +17,9 @@ public class CardService {
     private final CardRepository cards;
     private final BoardMemberService boardMemberService;
     private final ListService lists;
+
+    protected ServicesHolder services;
+
 
 
     public CardService(CardRepository cards, BoardMemberService boardMemberService, ListService lists) {
@@ -147,20 +152,34 @@ public class CardService {
     public void markDone(Long cardId, Long actorUserId) {
         Card c = requireById(cardId);
 
-        // mora biti član boarda + ne smije VIEWER
-        if (!boardMemberService.canWrite(c.getBoardId(), actorUserId)) {
+        boolean globalAdmin = "admin@local".equalsIgnoreCase(
+                services.userService.findById(actorUserId)
+                        .map(User::getEmail)
+                        .orElse("")
+        );
+
+        // ako nije global admin, mora imati write (OWNER/ADMIN/MEMBER)
+        if (!globalAdmin && !boardMemberService.canWrite(c.getBoardId(), actorUserId)) {
             throw new IllegalStateException("Nemaš prava da mijenjaš task na ovom boardu.");
         }
 
-         if (c.getAssignedTo() != null && !c.getAssignedTo().equals(actorUserId)) {
-             throw new IllegalStateException("Samo assignee može završiti task.");
-         }
+        // ako nije global admin, samo assignee može završiti task (ako je task dodijeljen)
+        if (!globalAdmin && c.getAssignedTo() != null && !c.getAssignedTo().equals(actorUserId)) {
+            throw new IllegalStateException("Samo assignee može završiti task.");
+        }
 
         Long doneListId = lists.requireLastListId(c.getBoardId());
 
         if (!doneListId.equals(c.getListId())) {
-            moveToList(c.getId(), doneListId); // koristi tvoju postojeću logiku (position i sve)
+            moveToList(c.getId(), doneListId); // koristi tvoju postojeću logiku
         }
     }
+
+
+    public List<CardRepository.TaskRow> listTaskRowsForDashboard(User loggedUser) {
+        boolean globalAdmin = carobnifrulas.web_tasks.security.model.SecurityUtils.isGlobalAdmin(loggedUser);
+        return cards.findTaskRows(globalAdmin ? null : loggedUser.getId());
+    }
+
 
 }

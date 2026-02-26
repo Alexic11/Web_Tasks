@@ -15,4 +15,7 @@ public interface BoardRepository extends JpaRepository<Board, Long> {
         order by b.id desc
     """)
     List<Board> findBoardsForUser(Long userId);
+
+    List<Board> findAllByOrderByIdDesc();
+
 }

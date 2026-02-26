@@ -1,5 +1,6 @@
 package carobnifrulas.web_tasks.security.model;
 
+import carobnifrulas.web_tasks.user.User;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextImpl;
 
@@ -21,4 +22,9 @@ public final class SecurityUtils {
         }
         return Optional.empty();
     }
+
+    public static boolean isGlobalAdmin(User u) {
+        return u != null && "admin@local".equalsIgnoreCase(u.getEmail());
+    }
+
 }
