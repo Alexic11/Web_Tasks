@@ -134,12 +134,7 @@ public class MainView extends AppLayout {
         currentView = view;
 
         view.prepare();
-
-        if (getUI().isPresent()) {
-            getUI().get().access(() -> super.setContent(view));
-        } else {
-            super.setContent(view);
-        }
+        super.setContent(view);
     }
 
     private void setLogoutButton() {

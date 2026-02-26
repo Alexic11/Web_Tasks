@@ -1,33 +1,38 @@
 package carobnifrulas.web_tasks.board;
 
 import jakarta.persistence.*;
-import lombok.Getter;
-import lombok.Setter;
-
-import java.io.Serializable;
 import java.time.Instant;
 
 @Entity
 @Table(name = "board_members")
-@Getter @Setter
 public class BoardMember {
 
     @EmbeddedId
-    private Id id;
+    private BoardMemberId id;
 
-    @Column(nullable = false, length = 20)
-    private String role; // OWNER/ADMIN/MEMBER/VIEWER
+    @Column(name = "role", nullable = false)
+    private String role;
 
-    @Column(name = "joined_at", nullable = false, updatable = false)
+    @Column(name = "joined_at", insertable = false, updatable = false)
     private Instant joinedAt;
 
-    @Embeddable
-    @Getter @Setter
-    public static class Id implements Serializable {
-        @Column(name = "board_id")
-        private Long boardId;
+    public BoardMemberId getId() {
+        return id;
+    }
 
-        @Column(name = "user_id")
-        private Long userId;
+    public void setId(BoardMemberId id) {
+        this.id = id;
+    }
+
+    public String getRole() {
+        return role;
+    }
+
+    public void setRole(String role) {
+        this.role = role;
+    }
+
+    public Instant getJoinedAt() {
+        return joinedAt;
     }
 }

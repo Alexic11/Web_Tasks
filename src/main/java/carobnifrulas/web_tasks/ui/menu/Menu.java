@@ -1,8 +1,13 @@
 package carobnifrulas.web_tasks.ui.menu;
 
 import carobnifrulas.web_tasks.ui.MainView;
-import carobnifrulas.web_tasks.ui.views.*;
+import carobnifrulas.web_tasks.ui.views.AdminUsersView;
+import carobnifrulas.web_tasks.ui.views.BoardsView;
+import carobnifrulas.web_tasks.ui.views.MyTasksView;
+import carobnifrulas.web_tasks.ui.views.View;
+import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.tabs.Tabs;
+import com.vaadin.flow.dom.DomEventListener;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -11,18 +16,8 @@ import java.util.List;
 @Component
 public class Menu {
 
-    private final BoardsView boardsView;
-    private final MyTasksView myTasksView;
-    private final AdminUsersView adminUsersView;
-
-    public Menu(BoardsView boardsView, MyTasksView myTasksView, AdminUsersView adminUsersView) {
-        this.boardsView = boardsView;
-        this.myTasksView = myTasksView;
-        this.adminUsersView = adminUsersView;
-    }
-
     public View getDefaultView() {
-        return boardsView;
+        return new BoardsView();
     }
 
     public Tabs getVerticalTabs() {
@@ -31,18 +26,26 @@ public class Menu {
         tabs.setWidthFull();
 
         List<MenuTab> items = new ArrayList<>();
-        items.add(boardsView);
-        items.add(myTasksView);
 
-        // admin-only tab (MVP uslov)
+        items.add(simple("Boards", VaadinIcon.DASHBOARD, e -> MainView.getMainView().setContent(new BoardsView())));
+        items.add(simple("My Tasks", VaadinIcon.TASKS, e -> MainView.getMainView().setContent(new MyTasksView())));
+
+        // admin-only (MVP)
         var mv = MainView.getMainView();
-        if (mv != null && mv.getLoggedUser() != null) {
-            if ("admin@local".equalsIgnoreCase(mv.getLoggedUser().getEmail())) {
-                items.add(adminUsersView);
-            }
+        if (mv != null && mv.getLoggedUser() != null
+                && "admin@local".equalsIgnoreCase(mv.getLoggedUser().getEmail())) {
+            items.add(simple("Admin", VaadinIcon.TOOLS, e -> MainView.getMainView().setContent(new AdminUsersView())));
         }
 
         items.forEach(it -> tabs.add(it.createTab()));
         return tabs;
+    }
+
+    private MenuTab simple(String name, VaadinIcon icon, DomEventListener click) {
+        return new MenuTab() {
+            @Override public String getTabName() { return name; }
+            @Override public VaadinIcon getTabIcon() { return icon; }
+            @Override public DomEventListener onTabClick() { return click; }
+        };
     }
 }

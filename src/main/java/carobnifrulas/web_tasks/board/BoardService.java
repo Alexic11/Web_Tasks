@@ -26,12 +26,12 @@ public class BoardService {
         b.setName(name);
         b = boards.save(b);
 
-        BoardMember.Id id = new BoardMember.Id();
-        id.setBoardId(b.getId());
-        id.setUserId(creatorUserId);
+        BoardMemberId id = new BoardMemberId(b.getId(), creatorUserId);
 
         BoardMember bm = new BoardMember();
         bm.setId(id);
+        bm.setRole("OWNER");
+        members.save(bm);
         bm.setRole("OWNER");
         members.save(bm);
 
