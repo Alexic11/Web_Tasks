@@ -102,4 +102,13 @@ public class BoardMemberService {
             throw new IllegalStateException("Nemaš prava da upravljaš članovima boarda.");
         }
     }
+
+    public List<BoardMemberRepository.AssigneeRow> listAssignees(Long boardId) {
+        return members.findAssignees(boardId);
+    }
+
+    public void requireMember(Long boardId, Long userId) {
+        members.findByIdBoardIdAndIdUserId(boardId, userId)
+                .orElseThrow(() -> new IllegalStateException("Korisnik nije član ovog boarda."));
+    }
 }

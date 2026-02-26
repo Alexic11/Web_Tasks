@@ -1,5 +1,6 @@
 package carobnifrulas.web_tasks.ui.views;
 
+import carobnifrulas.web_tasks.board.BoardMemberRepository;
 import carobnifrulas.web_tasks.board.BoardRole;
 import carobnifrulas.web_tasks.card.Card;
 import carobnifrulas.web_tasks.list.ListEntity;
@@ -11,6 +12,8 @@ import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.orderedlayout.*;
 
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 public class BoardView extends View {
 
@@ -28,6 +31,17 @@ public class BoardView extends View {
         BoardRole myRole = services.boardMemberService.getRole(boardId, loggedUser.getId());
         boolean canManageMembers = (myRole == BoardRole.OWNER || myRole == BoardRole.ADMIN);
         boolean canWrite = (myRole != BoardRole.VIEWER); // OWNER/ADMIN/MEMBER
+
+        // ✅ mapa: userId -> "Ime Prezime (email)" (učitaj jednom)
+        Map<Long, String> assigneeLabel = services.boardMemberService.listAssignees(boardId).stream()
+                .collect(Collectors.toMap(
+                        BoardMemberRepository.AssigneeRow::getUserId,
+                        r -> {
+                            String fn = r.getFullName() == null ? "" : r.getFullName().trim();
+                            if (!fn.isBlank()) return fn + " (" + r.getEmail() + ")";
+                            return r.getEmail();
+                        }
+                ));
 
         HorizontalLayout top = new HorizontalLayout();
         top.setWidthFull();
@@ -56,12 +70,11 @@ public class BoardView extends View {
                 .set("font-size", "var(--lumo-font-size-s)");
 
         Button membersBtn = new Button("Members", VaadinIcon.USERS.create(), e -> {
-            new BoardMembersDialog(boardId, loggedUser.getId(),services).open();
+            new BoardMembersDialog(boardId, loggedUser.getId(), services).open();
         });
         membersBtn.setVisible(canManageMembers);
 
         right.add(roleBadge, membersBtn);
-
         top.add(left, right);
         add(top);
 
@@ -73,7 +86,23 @@ public class BoardView extends View {
 
         List<ListEntity> lists = services.listService.findByBoard(boardId);
         if (lists.isEmpty()) {
+
             add(new Paragraph("Nema lista na ovom boardu."));
+
+            if (canWrite) {
+                Button createDefaults = new Button("Kreiraj default liste", e -> {
+                    services.listService.createDefaultListsIfMissing(boardId, loggedUser.getId());
+                    MainView.getMainView().setContent(new BoardView(boardId));
+                });
+
+                Button addList = new Button("Dodaj listu", e -> {
+                    new CreateListDialog(services, boardId, loggedUser.getId(), () ->
+                            MainView.getMainView().setContent(new BoardView(boardId))
+                    ).open();
+                });
+
+                add(new HorizontalLayout(createDefaults, addList));
+            }
             return;
         }
 
@@ -83,45 +112,78 @@ public class BoardView extends View {
 
         for (int i = 0; i < lists.size(); i++) {
             ListEntity list = lists.get(i);
-            columns.add(buildColumn(list, lists, i, canWrite));
+            columns.add(buildColumn(list, lists, i, canWrite, assigneeLabel));
         }
 
         add(columns);
     }
 
-    private Component buildColumn(ListEntity list, List<ListEntity> allLists, int idx, boolean canWrite) {
+    private Component buildColumn(ListEntity list,
+                                  List<ListEntity> allLists,
+                                  int idx,
+                                  boolean canWrite,
+                                  Map<Long, String> assigneeLabel) {
+
         VerticalLayout col = new VerticalLayout();
         col.setPadding(true);
         col.setSpacing(true);
         col.getStyle()
                 .set("border", "1px solid var(--lumo-contrast-20pct)")
                 .set("border-radius", "12px")
-                .set("min-width", "320px");
+                .set("min-width", "340px"); // malo šire
+
+        HorizontalLayout header = new HorizontalLayout();
+        header.setWidthFull();
+        header.setDefaultVerticalComponentAlignment(FlexComponent.Alignment.CENTER);
+        header.setJustifyContentMode(FlexComponent.JustifyContentMode.BETWEEN);
 
         H3 h = new H3(list.getTitle());
-        col.add(h);
+
+        Button addTask = new Button("+ Novi task", e -> {
+            TaskDialog.create(services, boardId, list.getId(), loggedUser.getId()).open();
+        });
+        addTask.setVisible(canWrite);
+
+        header.add(h, addTask);
+        col.add(header);
 
         List<Card> cards = services.cardService.findByList(list.getId());
         for (Card c : cards) {
-            col.add(renderCard(c, allLists, idx, canWrite));
+            col.add(renderCard(c, allLists, idx, canWrite, assigneeLabel));
         }
 
         return col;
     }
 
-    private Component renderCard(Card c, List<ListEntity> allLists, int idx, boolean canWrite) {
+    private Component renderCard(Card c,
+                                 List<ListEntity> allLists,
+                                 int idx,
+                                 boolean canWrite,
+                                 Map<Long, String> assigneeLabel) {
+
         VerticalLayout box = new VerticalLayout();
         box.setPadding(true);
         box.setSpacing(false);
         box.getStyle()
+                .set("cursor", "pointer")
                 .set("border", "1px solid var(--lumo-contrast-20pct)")
                 .set("border-radius", "12px");
+
+        // klik na karticu -> edit dialog
+        box.addClickListener(ev -> TaskDialog.edit(services, c, loggedUser.getId()).open());
 
         Span title = new Span(c.getTitle());
         title.getStyle().set("font-weight", "700");
 
-        Span assignee = new Span("Assigned: " + (c.getAssignedTo() == null ? "-" : c.getAssignedTo()));
-        assignee.getStyle().set("font-size", "var(--lumo-font-size-s)");
+        String assignedTxt = "-";
+        if (c.getAssignedTo() != null) {
+            assignedTxt = assigneeLabel.getOrDefault(c.getAssignedTo(), String.valueOf(c.getAssignedTo()));
+        }
+
+        Span assignee = new Span("Assigned: " + assignedTxt);
+        assignee.getStyle()
+                .set("font-size", "var(--lumo-font-size-s)")
+                .set("color", "var(--lumo-secondary-text-color)");
 
         HorizontalLayout actions = new HorizontalLayout();
         actions.setSpacing(true);

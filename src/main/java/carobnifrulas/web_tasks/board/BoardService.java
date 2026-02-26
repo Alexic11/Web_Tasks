@@ -1,5 +1,6 @@
 package carobnifrulas.web_tasks.board;
 
+import carobnifrulas.web_tasks.list.ListService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -10,10 +11,13 @@ public class BoardService {
 
     private final BoardRepository boards;
     private final BoardMemberRepository members;
+    private final ListService listService;
 
-    public BoardService(BoardRepository boards, BoardMemberRepository members) {
+
+    public BoardService(BoardRepository boards, BoardMemberRepository members, ListService listService) {
         this.boards = boards;
         this.members = members;
+        this.listService = listService;
     }
 
     public List<Board> findBoardsForUser(Long userId) {
@@ -34,6 +38,7 @@ public class BoardService {
         members.save(bm);
         bm.setRole("OWNER");
         members.save(bm);
+        listService.createDefaultListsIfMissing(b.getId(), creatorUserId);
 
         return b;
     }

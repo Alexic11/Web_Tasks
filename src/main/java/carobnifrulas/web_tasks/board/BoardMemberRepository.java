@@ -41,4 +41,19 @@ public interface BoardMemberRepository extends JpaRepository<BoardMember, BoardM
         String getFullName();
         String getRole(); // "OWNER"/"ADMIN"/...
     }
+
+    public interface AssigneeRow {
+        Long getUserId();
+        String getFullName();
+        String getEmail();
+    }
+
+    @org.springframework.data.jpa.repository.Query("""
+    select u.id as userId, u.fullName as fullName, u.email as email
+    from BoardMember bm
+    join User u on u.id = bm.id.userId
+    where bm.id.boardId = :boardId
+    order by u.fullName asc
+""")
+    java.util.List<AssigneeRow> findAssignees(Long boardId);
 }
