@@ -225,4 +225,68 @@ public class CardService {
         String t = s.trim();
         return t.isEmpty() ? null : t;
     }
+
+    @Transactional
+    public void reorderWithinList(Long cardId, Long listId, int targetIndex, Long actorUserId) {
+        Card moving = requireById(cardId);
+
+        if (!canWriteOrGlobalAdmin(moving.getBoardId(), actorUserId)) {
+            throw new IllegalStateException("Nemaš prava da mijenjaš task na ovom boardu.");
+        }
+
+        // Učitaj sve u listi po position
+        List<Card> items = cards.findByListIdAndArchivedAtIsNullOrderByPositionAsc(listId);
+
+        // izbaci moving iz liste ako je već tu
+        items.removeIf(c -> c.getId().equals(cardId));
+
+        if (targetIndex < 0) targetIndex = 0;
+        if (targetIndex > items.size()) targetIndex = items.size();
+
+        BigDecimal newPos;
+        if (items.isEmpty()) {
+            newPos = new BigDecimal("1000.000000");
+        } else if (targetIndex == 0) {
+            newPos = items.get(0).getPosition().subtract(new BigDecimal("1000.000000"));
+        } else if (targetIndex == items.size()) {
+            newPos = items.get(items.size() - 1).getPosition().add(new BigDecimal("1000.000000"));
+        } else {
+            BigDecimal prev = items.get(targetIndex - 1).getPosition();
+            BigDecimal next = items.get(targetIndex).getPosition();
+            newPos = prev.add(next).divide(new BigDecimal("2"), java.math.RoundingMode.HALF_UP);
+
+            // ako su preblizu (rijetko), reindex cijelu listu
+            if (newPos.equals(prev) || newPos.equals(next)) {
+                reindexList(listId);
+                items = cards.findByListIdAndArchivedAtIsNullOrderByPositionAsc(listId);
+                items.removeIf(c -> c.getId().equals(cardId));
+
+                if (targetIndex == 0) {
+                    newPos = items.get(0).getPosition().subtract(new BigDecimal("1000.000000"));
+                } else if (targetIndex == items.size()) {
+                    newPos = items.get(items.size() - 1).getPosition().add(new BigDecimal("1000.000000"));
+                } else {
+                    BigDecimal p2 = items.get(targetIndex - 1).getPosition();
+                    BigDecimal n2 = items.get(targetIndex).getPosition();
+                    newPos = p2.add(n2).divide(new BigDecimal("2"), java.math.RoundingMode.HALF_UP);
+                }
+            }
+        }
+
+        moving.setListId(listId);
+        moving.setPosition(newPos);
+        cards.save(moving);
+    }
+
+    @Transactional
+    public void reindexList(Long listId) {
+        List<Card> items = cards.findByListIdAndArchivedAtIsNullOrderByPositionAsc(listId);
+        BigDecimal pos = new BigDecimal("1000.000000");
+        for (Card c : items) {
+            c.setPosition(pos);
+            pos = pos.add(new BigDecimal("1000.000000"));
+        }
+        cards.saveAll(items);
+    }
+
 }
