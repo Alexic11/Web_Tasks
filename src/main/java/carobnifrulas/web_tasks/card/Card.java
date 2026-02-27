@@ -12,6 +12,7 @@ import java.time.LocalDateTime;
 @Table(name = "cards")
 @Getter @Setter
 public class Card {
+
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
@@ -35,6 +36,9 @@ public class Card {
 
     @Column(name = "assigned_to")
     private Long assignedTo;
+
+    @Column(name = "priority", nullable = false)
+    private Integer priority = 1;
 
     @Column(nullable = false, precision = 18, scale = 6)
     private BigDecimal position;

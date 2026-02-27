@@ -66,6 +66,21 @@ public class TaskDialog extends Dialog {
         DateTimePicker due = new DateTimePicker("Rok (opciono)");
         due.setWidth("280px");
 
+        // ✅ Prioritet 1-5
+        Select<Integer> priority = new Select<>();
+        priority.setLabel("Prioritet");
+        priority.setItems(1, 2, 3, 4, 5);
+        priority.setValue(1);
+        priority.setWidth("260px");
+        priority.setItemLabelGenerator(p -> switch (p) {
+            case 1 -> "1 - Normalno";
+            case 2 -> "2 - Nisko";
+            case 3 -> "3 - Srednje";
+            case 4 -> "4 - Visoko";
+            case 5 -> "5 - HITNO (kritično)";
+            default -> String.valueOf(p);
+        });
+
         // ✅ Opcioni assignee
         Select<Long> assignedTo = new Select<>();
         assignedTo.setLabel("Dodijeli (opciono)");
@@ -93,11 +108,15 @@ public class TaskDialog extends Dialog {
             desc.setValue(nullSafe(existing.getDescription()));
             due.setValue(existing.getDueAt());                 // može null
             assignedTo.setValue(existing.getAssignedTo());    // može null
+
+            Integer p = existing.getPriority();
+            priority.setValue(p == null ? 1 : p);
         }
 
         title.setReadOnly(!canWrite);
         desc.setReadOnly(!canWrite);
         due.setReadOnly(!canWrite);
+        priority.setReadOnly(!canWrite);
         assignedTo.setReadOnly(!canWrite);
 
         Button save = new Button("Sačuvaj");
@@ -107,26 +126,30 @@ public class TaskDialog extends Dialog {
 
         save.addClickListener(e -> {
             try {
-                LocalDateTime dueVal = due.getValue(); // može null
-                Long assigneeId = assignedTo.getValue(); // može null
+                LocalDateTime dueVal = due.getValue();      // može null
+                Long assigneeId = assignedTo.getValue();    // može null
+                Integer pr = priority.getValue();           // ne bi trebalo null, ali može ako user obriše
 
                 if (!isEdit) {
-                    // ⬇️ moraš proširiti createCard da prima assignedTo (vidi napomenu ispod)
+                    // ✅ createCard proširen da prima priority
                     services.cardService.createCard(
                             boardId, listId,
                             title.getValue(),
                             desc.getValue(),
                             dueVal,
+                            pr,
                             assigneeId,
                             actorUserId
                     );
                 } else {
+                    // ✅ updateCard proširen da prima priority
                     services.cardService.updateCard(
                             existing.getId(),
                             actorUserId,
                             title.getValue(),
                             desc.getValue(),
                             dueVal,
+                            pr,
                             assigneeId
                     );
                 }
@@ -142,9 +165,10 @@ public class TaskDialog extends Dialog {
 
         HorizontalLayout actions = new HorizontalLayout(save, cancel);
 
-        HorizontalLayout row2 = new HorizontalLayout(due, assignedTo);
+        HorizontalLayout row2 = new HorizontalLayout(due, priority, assignedTo);
         row2.setWidthFull();
         row2.setFlexGrow(1, assignedTo);
+
         VerticalLayout content = new VerticalLayout(
                 new H4(isEdit ? "Detalji" : "Kreiranje"),
                 title,

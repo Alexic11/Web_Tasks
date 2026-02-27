@@ -14,10 +14,15 @@ import com.vaadin.flow.component.orderedlayout.*;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import java.time.format.DateTimeFormatter;
+
 
 public class BoardView extends View {
 
     private final Long boardId;
+
+    private static final DateTimeFormatter DT_FMT = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
+
 
     public BoardView(Long boardId) {
         this.boardId = boardId;
@@ -188,6 +193,23 @@ public class BoardView extends View {
         HorizontalLayout actions = new HorizontalLayout();
         actions.setSpacing(true);
 
+        Span pr = new Span("P" + (c.getPriority() == null ? 1 : c.getPriority()));
+        pr.getStyle()
+                .set("font-size", "var(--lumo-font-size-s)")
+                .set("padding", "2px 8px")
+                .set("border-radius", "999px")
+                .set("border", "1px solid var(--lumo-contrast-20pct)");
+
+        String dueTxt = (c.getDueAt() == null) ? "—" : DT_FMT.format(c.getDueAt());
+        Span due = new Span("Rok: " + dueTxt);
+        due.getStyle()
+                .set("font-size", "var(--lumo-font-size-s)")
+                .set("color", "var(--lumo-secondary-text-color)");
+
+        HorizontalLayout meta = new HorizontalLayout(pr, due);
+        meta.setSpacing(true);
+
+
         Button take = new Button("Preuzmi", e -> {
             services.cardService.assignToMe(c.getId(), loggedUser.getId());
             MainView.getMainView().setContent(new BoardView(boardId));
@@ -221,7 +243,7 @@ public class BoardView extends View {
 
         actions.add(take, release, left, right);
 
-        box.add(title, assignee, actions);
+        box.add(title, assignee,meta, actions);
         return box;
     }
 }

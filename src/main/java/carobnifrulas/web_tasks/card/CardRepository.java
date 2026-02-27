@@ -21,8 +21,8 @@ public interface CardRepository extends JpaRepository<Card, Long> {
     interface MyTaskRow {
         Long getCardId();
         String getTitle();
-        LocalDateTime getDueAt();
-        Instant getUpdatedAt();
+        Integer getPriority();
+        java.time.LocalDateTime getDueAt();
         Long getBoardId();
         String getBoardName();
         Long getListId();
@@ -30,22 +30,24 @@ public interface CardRepository extends JpaRepository<Card, Long> {
     }
 
     @Query("""
-            select c.id as cardId,
-                   c.title as title,
-                   c.dueAt as dueAt,
-                   c.updatedAt as updatedAt,
-                   c.boardId as boardId,
-                   b.name as boardName,
-                   c.listId as listId,
-                   l.title as listTitle
-            from Card c
-            join Board b on b.id = c.boardId
-            join ListEntity l on l.id = c.listId
-            where c.assignedTo = :userId
-              and c.archivedAt is null
-            order by c.updatedAt desc
-            """)
+    select
+      c.id as cardId,
+      c.title as title,
+      c.priority as priority,
+      c.dueAt as dueAt,
+      b.id as boardId,
+      b.name as boardName,
+      l.id as listId,
+      l.title as listTitle
+    from Card c
+      join Board b on b.id = c.boardId
+      join ListEntity l on l.id = c.listId
+    where c.assignedTo = :userId
+      and c.archivedAt is null
+    order by c.updatedAt desc
+""")
     List<MyTaskRow> findMyTasks(Long userId);
+
 
 
     public interface TaskRow {
@@ -83,6 +85,8 @@ public interface CardRepository extends JpaRepository<Card, Long> {
     where (:assigneeId is null or c.assignedTo = :assigneeId)
 """)
     java.util.List<TaskRow> findTaskRows(Long assigneeId);
+
+
 
 
 }
