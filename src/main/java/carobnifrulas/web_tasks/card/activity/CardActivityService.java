@@ -22,6 +22,7 @@ public class CardActivityService {
     public static final String UNASSIGNED = "UNASSIGNED";
     public static final String DONE = "DONE";
     public static final String UPDATED = "UPDATED";
+    public static final String COMMENTED = "COMMENTED";
 
     private static final DateTimeFormatter DTF = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
 
@@ -78,6 +79,12 @@ public class CardActivityService {
     public void logUpdated(Long cardId, Long actorUserId, String summary) {
         // za "general update" kad se promijeni nešto drugo (npr naslov/opis)
         log(cardId, actorUserId, UPDATED, null, safe(summary));
+    }
+    @Transactional
+    public void logComment(Long cardId, Long actorUserId, String body) {
+        String preview = safe(body).trim();
+        if (preview.length() > 120) preview = preview.substring(0, 120) + "…";
+        log(cardId, actorUserId, COMMENTED, null, preview);
     }
 
     private void log(Long cardId, Long actorUserId, String action, String oldValue, String newValue) {

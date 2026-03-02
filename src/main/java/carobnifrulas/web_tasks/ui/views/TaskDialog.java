@@ -7,10 +7,15 @@ import carobnifrulas.web_tasks.card.activity.CardActivity;
 import carobnifrulas.web_tasks.services.ServicesHolder;
 import carobnifrulas.web_tasks.ui.MainView;
 import com.vaadin.flow.component.button.Button;
-import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.datetimepicker.DateTimePicker;
+import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.grid.Grid;
+import com.vaadin.flow.component.html.H3;
 import com.vaadin.flow.component.html.H4;
+import com.vaadin.flow.component.html.Span;
+import com.vaadin.flow.component.messages.MessageInput;
+import com.vaadin.flow.component.messages.MessageList;
+import com.vaadin.flow.component.messages.MessageListItem;
 import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
@@ -21,6 +26,7 @@ import com.vaadin.flow.component.textfield.TextField;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -61,6 +67,9 @@ public class TaskDialog extends Dialog {
         setDraggable(true);
         setResizable(true);
 
+        // =========================
+        // ✅ FIELDS
+        // =========================
         TextField title = new TextField("Naslov");
         title.setWidthFull();
 
@@ -72,7 +81,6 @@ public class TaskDialog extends Dialog {
         DateTimePicker due = new DateTimePicker("Rok (opciono)");
         due.setWidth("280px");
 
-        // ✅ Prioritet 1-5
         Select<Integer> priority = new Select<>();
         priority.setLabel("Prioritet");
         priority.setItems(1, 2, 3, 4, 5);
@@ -87,7 +95,6 @@ public class TaskDialog extends Dialog {
             default -> String.valueOf(p);
         });
 
-        // ✅ Opcioni assignee
         Select<Long> assignedTo = new Select<>();
         assignedTo.setLabel("Dodijeli (opciono)");
         assignedTo.setWidth("420px");
@@ -170,65 +177,164 @@ public class TaskDialog extends Dialog {
         row2.setWidthFull();
         row2.setFlexGrow(1, assignedTo);
 
-        VerticalLayout content = new VerticalLayout(
+        // =========================
+        // ✅ DETAILS "CARD"
+        // =========================
+        VerticalLayout detailsCard = new VerticalLayout(
                 new H4(isEdit ? "Detalji" : "Kreiranje"),
                 title,
                 desc,
                 row2,
                 actions
         );
-        content.setPadding(false);
-        content.setSpacing(true);
-        content.setWidthFull();
+        detailsCard.setPadding(false);
+        detailsCard.setSpacing(true);
+        detailsCard.setWidthFull();
+        applyCardStyle(detailsCard);
 
-        add(content);
-
-        // =========================
-        // ✅ ACTIVITY (samo edit)
-        // =========================
-        if (isEdit) {
-            Grid<CardActivity> activityGrid = new Grid<>(CardActivity.class, false);
-            activityGrid.setWidthFull();
-            activityGrid.setAllRowsVisible(true);
-
-            activityGrid.addColumn(a -> formatInstant(a.getCreatedAt()))
-                    .setHeader("Vrijeme")
-                    .setAutoWidth(true)
-                    .setFlexGrow(0);
-
-            activityGrid.addColumn(CardActivity::getActorEmail)
-                    .setHeader("Ko")
-                    .setAutoWidth(true)
-                    .setFlexGrow(1);
-
-            activityGrid.addColumn(CardActivity::getAction)
-                    .setHeader("Akcija")
-                    .setAutoWidth(true)
-                    .setFlexGrow(0);
-
-            activityGrid.addColumn(a -> nullSafe(a.getOldValue()))
-                    .setHeader("Staro")
-                    .setAutoWidth(true)
-                    .setFlexGrow(1);
-
-            activityGrid.addColumn(a -> nullSafe(a.getNewValue()))
-                    .setHeader("Novo")
-                    .setAutoWidth(true)
-                    .setFlexGrow(1);
-
-            List<CardActivity> acts = services.cardActivityService.listForCard(existing.getId());
-            activityGrid.setItems(acts);
-
-            VerticalLayout activityWrap = new VerticalLayout(
-                    new H4("Activity"),
-                    activityGrid
-            );
-            activityWrap.setPadding(false);
-            activityWrap.setSpacing(true);
-            activityWrap.setWidthFull();
-
-            add(activityWrap);
+        // create: samo detalji
+        if (!isEdit) {
+            add(detailsCard);
+            return;
         }
+
+        // edit: komentari i activity ispod
+        VerticalLayout commentsCard = buildCommentsSection(existing.getId(), canWrite);
+        applyCardStyle(commentsCard);
+
+        VerticalLayout activityCard = buildActivitySection(existing.getId());
+        applyCardStyle(activityCard);
+
+        VerticalLayout root = new VerticalLayout(detailsCard, commentsCard, activityCard);
+        root.setPadding(false);
+        root.setSpacing(true);
+        root.setWidthFull();
+
+        add(root);
+    }
+
+    private VerticalLayout buildActivitySection(Long cardId) {
+        Grid<CardActivity> activityGrid = new Grid<>(CardActivity.class, false);
+        activityGrid.setWidthFull();
+
+        // scroll: da ne raste beskonačno
+        activityGrid.setHeight("280px");
+
+        activityGrid.addColumn(a -> formatInstant(a.getCreatedAt()))
+                .setHeader("Vrijeme")
+                .setAutoWidth(true)
+                .setFlexGrow(0);
+
+        activityGrid.addColumn(CardActivity::getActorEmail)
+                .setHeader("Ko")
+                .setAutoWidth(true)
+                .setFlexGrow(1);
+
+        activityGrid.addColumn(CardActivity::getAction)
+                .setHeader("Akcija")
+                .setAutoWidth(true)
+                .setFlexGrow(0);
+
+        activityGrid.addColumn(a -> nullSafe(a.getOldValue()))
+                .setHeader("Staro")
+                .setAutoWidth(true)
+                .setFlexGrow(1);
+
+        activityGrid.addColumn(a -> nullSafe(a.getNewValue()))
+                .setHeader("Novo")
+                .setAutoWidth(true)
+                .setFlexGrow(1);
+
+        List<CardActivity> acts = services.cardActivityService.listForCard(cardId);
+        activityGrid.setItems(acts);
+
+        VerticalLayout wrap = new VerticalLayout(
+                new H4("Activity"),
+                activityGrid
+        );
+        wrap.setPadding(false);
+        wrap.setSpacing(true);
+        wrap.setWidthFull();
+
+        return wrap;
+    }
+
+    private VerticalLayout buildCommentsSection(Long cardId, boolean canWrite) {
+        VerticalLayout root = new VerticalLayout();
+        root.setPadding(false);
+        root.setSpacing(true);
+        root.setWidthFull();
+
+        H3 title = new H3("Komentari");
+        title.getStyle().set("margin", "0");
+
+        MessageList list = new MessageList();
+        list.setWidthFull();
+
+        // scroll + border unutar card-a
+        list.getStyle()
+                .set("max-height", "220px")
+                .set("overflow", "auto")
+                .set("border", "1px solid var(--lumo-contrast-10pct)")
+                .set("border-radius", "10px")
+                .set("padding", "8px");
+
+        Span hint = new Span(
+                canWrite ? "Napiši komentar i pritisni Enter." : "Nemaš prava da dodaješ komentare."
+        );
+        hint.getStyle().set("font-size", "var(--lumo-font-size-s)");
+        hint.getStyle().set("color", "var(--lumo-secondary-text-color)");
+
+        Runnable reload = () -> {
+            try {
+                var rows = services.cardCommentService.listForCard(cardId, actorUserId);
+                var items = new ArrayList<MessageListItem>();
+
+                for (var r : rows) {
+                    String author = (r.getAuthorName() != null && !r.getAuthorName().isBlank())
+                            ? r.getAuthorName()
+                            : r.getAuthorEmail();
+
+                    java.time.Instant when = null;
+                    if (r.getCreatedAt() != null) {
+                        when = r.getCreatedAt().atZone(ZoneId.systemDefault()).toInstant();
+                    }
+
+                    items.add(new MessageListItem(r.getBody(), when, author));
+                }
+
+                list.setItems(items);
+            } catch (Exception ex) {
+                Notification.show("Ne mogu učitati komentare: " + ex.getMessage(),
+                        4000, Notification.Position.MIDDLE);
+            }
+        };
+
+        reload.run();
+
+        MessageInput input = new MessageInput();
+        input.setWidthFull();
+        input.setEnabled(canWrite);
+
+        input.addSubmitListener(e -> {
+            try {
+                services.cardCommentService.addComment(cardId, actorUserId, e.getValue());
+                reload.run();
+            } catch (Exception ex) {
+                Notification.show("Greška: " + ex.getMessage(),
+                        4000, Notification.Position.MIDDLE);
+            }
+        });
+
+        root.add(title, list, hint, input);
+        return root;
+    }
+
+    private static void applyCardStyle(VerticalLayout layout) {
+        layout.getStyle()
+                .set("border", "1px solid var(--lumo-contrast-10pct)")
+                .set("border-radius", "12px")
+                .set("padding", "12px");
     }
 
     private static String nullSafe(String s) {
@@ -237,7 +343,6 @@ public class TaskDialog extends Dialog {
 
     private static String formatInstant(java.time.Instant ins) {
         if (ins == null) return "—";
-        // pretvori u LocalDateTime po lokalnoj zoni servera
         LocalDateTime dt = LocalDateTime.ofInstant(ins, ZoneId.systemDefault());
         return DT_FMT.format(dt);
     }

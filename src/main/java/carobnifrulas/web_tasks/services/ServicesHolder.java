@@ -4,6 +4,7 @@ import carobnifrulas.web_tasks.board.BoardMemberService;
 import carobnifrulas.web_tasks.board.BoardService;
 import carobnifrulas.web_tasks.card.CardService;
 import carobnifrulas.web_tasks.card.activity.CardActivityService;
+import carobnifrulas.web_tasks.card.comment.CardCommentService;
 import carobnifrulas.web_tasks.list.ListService;
 import carobnifrulas.web_tasks.security.model.AppUserService;
 import carobnifrulas.web_tasks.ui.menu.Menu;
@@ -18,6 +19,7 @@ public class ServicesHolder {
     public final CardService cardService;
     public final BoardMemberService boardMemberService;
     public final CardActivityService cardActivityService;
+    public final CardCommentService cardCommentService;
 
     // (mali trik) da BoardView može nazad na default view
     public final Menu menu;
@@ -25,7 +27,7 @@ public class ServicesHolder {
     public ServicesHolder(AppUserService userService,
                           BoardService boardService,
                           ListService listService,
-                          CardService cardService, BoardMemberService boardMemberService, CardActivityService cardActivityService,
+                          CardService cardService, BoardMemberService boardMemberService, CardActivityService cardActivityService, CardCommentService cardCommentService,
                           Menu menu) {
         this.userService = userService;
         this.boardService = boardService;
@@ -33,6 +35,7 @@ public class ServicesHolder {
         this.cardService = cardService;
         this.boardMemberService = boardMemberService;
         this.cardActivityService = cardActivityService;
+        this.cardCommentService = cardCommentService;
         this.menu = menu;
     }
 }
