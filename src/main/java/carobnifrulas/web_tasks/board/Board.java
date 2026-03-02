@@ -5,6 +5,8 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
+
 
 @Entity
 @Table(name = "boards")
@@ -18,4 +20,7 @@ public class Board {
 
     @Column(name = "created_at", insertable = false, updatable = false)
     private Instant createdAt;
+
+    @Column(name = "archived_at")
+    private LocalDateTime archivedAt;
 }

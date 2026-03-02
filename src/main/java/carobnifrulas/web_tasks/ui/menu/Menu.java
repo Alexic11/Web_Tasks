@@ -1,10 +1,7 @@
 package carobnifrulas.web_tasks.ui.menu;
 
 import carobnifrulas.web_tasks.ui.MainView;
-import carobnifrulas.web_tasks.ui.views.AdminUsersView;
-import carobnifrulas.web_tasks.ui.views.BoardsView;
-import carobnifrulas.web_tasks.ui.views.MyTasksView;
-import carobnifrulas.web_tasks.ui.views.View;
+import carobnifrulas.web_tasks.ui.views.*;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.tabs.Tabs;
 import com.vaadin.flow.dom.DomEventListener;
@@ -29,6 +26,7 @@ public class Menu {
 
         items.add(simple("Boards", VaadinIcon.DASHBOARD, e -> MainView.getMainView().setContent(new BoardsView())));
         items.add(simple("My Tasks", VaadinIcon.TASKS, e -> MainView.getMainView().setContent(new MyTasksView())));
+        items.add(simple("History", VaadinIcon.ARCHIVE, e -> MainView.getMainView().setContent(new ArchivedBoardsView())));
 
         // admin-only (MVP)
         var mv = MainView.getMainView();

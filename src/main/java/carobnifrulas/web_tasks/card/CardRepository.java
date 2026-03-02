@@ -88,5 +88,14 @@ public interface CardRepository extends JpaRepository<Card, Long> {
 
 
 
+    @Query("""
+    select count(c) from Card c
+    where c.boardId = :boardId
+      and c.archivedAt is null
+      and c.listId <> :doneListId
+""")
+    long countNotInDone(Long boardId, Long doneListId);
+
+
 
 }

@@ -7,6 +7,7 @@ import carobnifrulas.web_tasks.list.ListEntity;
 import carobnifrulas.web_tasks.ui.MainView;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.component.confirmdialog.ConfirmDialog;
 import com.vaadin.flow.component.dnd.DragSource;
 import com.vaadin.flow.component.dnd.DropEffect;
 import com.vaadin.flow.component.dnd.DropTarget;
@@ -29,7 +30,6 @@ import java.util.stream.Collectors;
 public class BoardView extends View {
 
     private final Long boardId;
-
     private final AtomicLong draggedCardId = new AtomicLong(-1L);
 
     private static final DateTimeFormatter DT_FMT =
@@ -43,9 +43,15 @@ public class BoardView extends View {
     public void setElements() {
         var board = services.boardService.requireMemberBoard(boardId, loggedUser.getId());
 
+        boolean archived = board.getArchivedAt() != null;
+
         BoardRole myRole = services.boardMemberService.getRole(boardId, loggedUser.getId());
         boolean canManageMembers = (myRole == BoardRole.OWNER || myRole == BoardRole.ADMIN);
-        boolean canWrite = (myRole != BoardRole.VIEWER);
+
+        boolean isGlobalAdmin = carobnifrulas.web_tasks.security.model.SecurityUtils.isGlobalAdmin(loggedUser);
+
+        boolean canWrite = (myRole != BoardRole.VIEWER) && !archived;
+        boolean canArchive = !archived && (isGlobalAdmin || myRole == BoardRole.OWNER || myRole == BoardRole.ADMIN);
 
         Map<Long, String> assigneeLabel =
                 services.boardMemberService.listAssignees(boardId).stream()
@@ -58,6 +64,7 @@ public class BoardView extends View {
                                 }
                         ));
 
+        // ===== TOP BAR =====
         HorizontalLayout top = new HorizontalLayout();
         top.setWidthFull();
         top.setDefaultVerticalComponentAlignment(FlexComponent.Alignment.CENTER);
@@ -83,22 +90,61 @@ public class BoardView extends View {
                 .set("border", "1px solid var(--lumo-contrast-20pct)")
                 .set("font-size", "var(--lumo-font-size-s)");
 
+        if (archived) {
+            Span archivedBadge = new Span("ARCHIVED");
+            archivedBadge.getStyle()
+                    .set("padding", "4px 10px")
+                    .set("border-radius", "999px")
+                    .set("background", "var(--lumo-contrast-10pct)")
+                    .set("font-size", "var(--lumo-font-size-s)");
+            right.add(archivedBadge);
+        }
+
         Button membersBtn = new Button("Members",
                 VaadinIcon.USERS.create(),
                 e -> new BoardMembersDialog(boardId, loggedUser.getId(), services).open());
+        membersBtn.setVisible(canManageMembers && !archived);
 
-        membersBtn.setVisible(canManageMembers);
+        Button closeBoard = new Button("Zatvori", VaadinIcon.LOCK.create());
+        closeBoard.addClickListener(e -> {
+            ConfirmDialog cd = new ConfirmDialog();
+            cd.setHeader("Zatvori board?");
+            cd.setText("Jesi li siguran da želiš zatvoriti ovaj board? Board će preći u History.");
+            cd.setCancelable(true);
 
-        right.add(roleBadge, membersBtn);
+            cd.setConfirmText("Zatvori");
+            cd.setConfirmButtonTheme("error primary");
+
+            cd.addConfirmListener(ev -> {
+                try {
+                    services.boardService.archiveBoard(boardId, loggedUser.getId());
+                    Notification.show("Board zatvoren.");
+                    MainView.getMainView().setContent(new BoardsView());
+                } catch (Exception ex) {
+                    Notification.show(ex.getMessage());
+                }
+            });
+
+            cd.open();
+        });
+        closeBoard.setVisible(canArchive);
+
+
+        right.add(roleBadge, membersBtn, closeBoard);
         top.add(left, right);
         add(top);
 
-        if (!canWrite) {
+        if (archived) {
+            Paragraph p = new Paragraph("Ovaj board je zatvoren (History režim) — samo pregled.");
+            p.getStyle().set("color", "var(--lumo-secondary-text-color)");
+            add(p);
+        } else if (!canWrite) {
             Paragraph p = new Paragraph("VIEWER režim: možeš samo pregledati board.");
             p.getStyle().set("color", "var(--lumo-secondary-text-color)");
             add(p);
         }
 
+        // ===== COLUMNS =====
         List<ListEntity> lists = services.listService.findByBoard(boardId);
 
         HorizontalLayout columns = new HorizontalLayout();
@@ -140,21 +186,23 @@ public class BoardView extends View {
         header.add(h, addTask);
         col.add(header);
 
-        // ✅ Drop na samu listu => ide na kraj liste
-        DropTarget<VerticalLayout> dropOnList = DropTarget.create(col);
-        dropOnList.setDropEffect(DropEffect.MOVE);
-        dropOnList.addDropListener(e -> {
-            Long movingId = draggedCardId.get();
-            if (!canWrite || movingId == null || movingId <= 0) return;
+        // ✅ Drop na samu listu => ide na kraj liste (samo ako može pisati)
+        if (canWrite) {
+            DropTarget<VerticalLayout> dropOnList = DropTarget.create(col);
+            dropOnList.setDropEffect(DropEffect.MOVE);
+            dropOnList.addDropListener(e -> {
+                Long movingId = draggedCardId.get();
+                if (movingId == null || movingId <= 0) return;
 
-            try {
-                int endIndex = services.cardService.findByList(list.getId()).size();
-                services.cardService.reorderWithinList(movingId, list.getId(), endIndex, loggedUser.getId());
-                MainView.getMainView().setContent(new BoardView(boardId));
-            } catch (Exception ex) {
-                Notification.show(ex.getMessage());
-            }
-        });
+                try {
+                    int endIndex = services.cardService.findByList(list.getId()).size();
+                    services.cardService.reorderWithinList(movingId, list.getId(), endIndex, loggedUser.getId());
+                    MainView.getMainView().setContent(new BoardView(boardId));
+                } catch (Exception ex) {
+                    Notification.show(ex.getMessage());
+                }
+            });
+        }
 
         List<Card> cards = services.cardService.findByList(list.getId());
         for (Card c : cards) {
@@ -175,43 +223,44 @@ public class BoardView extends View {
         box.setPadding(true);
         box.setSpacing(false);
         box.getStyle()
-                .set("cursor", "grab")
+                .set("cursor", canWrite ? "grab" : "pointer")
                 .set("border", "1px solid var(--lumo-contrast-20pct)")
                 .set("border-radius", "12px");
 
-        // ✅ Drag source
-        DragSource<Component> drag = DragSource.create(box);
-        drag.setDragData(c.getId());
-        drag.setEffectAllowed(EffectAllowed.MOVE);
-        drag.addDragStartListener(e -> draggedCardId.set(c.getId()));
-        drag.addDragEndListener(e -> draggedCardId.set(-1L));
+        // ✅ Drag & Drop samo ako može pisati
+        if (canWrite) {
+            DragSource<Component> drag = DragSource.create(box);
+            drag.setDragData(c.getId());
+            drag.setEffectAllowed(EffectAllowed.MOVE);
+            drag.addDragStartListener(e -> draggedCardId.set(c.getId()));
+            drag.addDragEndListener(e -> draggedCardId.set(-1L));
 
-        // ✅ Drop target na karticu (drop => ubaci prije ove kartice)
-        DropTarget<Component> drop = DropTarget.create(box);
-        drop.setDropEffect(DropEffect.MOVE);
-        drop.addDropListener(e -> {
-            Long movingId = draggedCardId.get();
-            if (!canWrite || movingId == null || movingId <= 0) return;
-            if (movingId.equals(c.getId())) return;
+            DropTarget<Component> drop = DropTarget.create(box);
+            drop.setDropEffect(DropEffect.MOVE);
+            drop.addDropListener(e -> {
+                Long movingId = draggedCardId.get();
+                if (movingId == null || movingId <= 0) return;
+                if (movingId.equals(c.getId())) return;
 
-            try {
-                List<Card> inList = services.cardService.findByList(columnListId);
-                int targetIdx = 0;
-                for (int i = 0; i < inList.size(); i++) {
-                    if (inList.get(i).getId().equals(c.getId())) {
-                        targetIdx = i;
-                        break;
+                try {
+                    List<Card> inList = services.cardService.findByList(columnListId);
+                    int targetIdx = 0;
+                    for (int i = 0; i < inList.size(); i++) {
+                        if (inList.get(i).getId().equals(c.getId())) {
+                            targetIdx = i;
+                            break;
+                        }
                     }
+
+                    services.cardService.reorderWithinList(movingId, columnListId, targetIdx, loggedUser.getId());
+                    MainView.getMainView().setContent(new BoardView(boardId));
+                } catch (Exception ex) {
+                    Notification.show(ex.getMessage());
                 }
+            });
+        }
 
-                services.cardService.reorderWithinList(movingId, columnListId, targetIdx, loggedUser.getId());
-                MainView.getMainView().setContent(new BoardView(boardId));
-            } catch (Exception ex) {
-                Notification.show(ex.getMessage());
-            }
-        });
-
-        // klik na karticu -> edit dialog (ali samo ako nije drag završio)
+        // klik -> edit dialog (i u archived režimu dozvoljeno, ali TaskDialog će ti ionako biti readOnly ako tako radiš)
         box.addClickListener(ev -> TaskDialog.edit(services, c, loggedUser.getId()).open());
 
         Span title = new Span(c.getTitle());
@@ -233,9 +282,9 @@ public class BoardView extends View {
         HorizontalLayout meta = new HorizontalLayout(priority, due);
         meta.setSpacing(true);
 
-        // ✅ Actions (vratio sam tvoje dugmiće)
         HorizontalLayout actions = new HorizontalLayout();
         actions.setSpacing(true);
+        actions.setVisible(canWrite);
 
         Button take = new Button("Preuzmi", e -> {
             services.cardService.assignToMe(c.getId(), loggedUser.getId());
@@ -248,35 +297,29 @@ public class BoardView extends View {
         });
 
         boolean iAmAssignee = c.getAssignedTo() != null && c.getAssignedTo().equals(loggedUser.getId());
-        take.setEnabled(canWrite && c.getAssignedTo() == null);
-        release.setEnabled(canWrite && iAmAssignee);
+        take.setEnabled(c.getAssignedTo() == null);
+        release.setEnabled(iAmAssignee);
 
         Button left = new Button(VaadinIcon.ARROW_LEFT.create(), e -> {
-            if (!canWrite) return;
             if (idx == 0) return;
             services.cardService.moveToList(c.getId(), allLists.get(idx - 1).getId());
             MainView.getMainView().setContent(new BoardView(boardId));
         });
 
         Button right = new Button(VaadinIcon.ARROW_RIGHT.create(), e -> {
-            if (!canWrite) return;
             if (idx >= allLists.size() - 1) return;
             services.cardService.moveToList(c.getId(), allLists.get(idx + 1).getId());
             MainView.getMainView().setContent(new BoardView(boardId));
         });
 
-        left.setEnabled(canWrite && idx > 0);
-        right.setEnabled(canWrite && idx < allLists.size() - 1);
+        left.setEnabled(idx > 0);
+        right.setEnabled(idx < allLists.size() - 1);
 
         actions.add(take, release, left, right);
 
         box.add(title, assignee, meta, actions);
         return box;
     }
-
-    // =========================
-    // PRIORITY BADGE
-    // =========================
 
     private Span buildPriorityBadge(Integer p) {
         int pr = (p == null) ? 1 : p;
@@ -307,10 +350,6 @@ public class BoardView extends View {
 
         return s;
     }
-
-    // =========================
-    // OVERDUE STYLING
-    // =========================
 
     private Span buildDueLabel(LocalDateTime dueAt) {
         String dueTxt = (dueAt == null)
