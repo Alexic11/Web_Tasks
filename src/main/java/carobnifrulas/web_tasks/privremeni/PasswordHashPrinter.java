@@ -16,6 +16,6 @@ public class PasswordHashPrinter implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
-        System.out.println("BCrypt(admin) = " + encoder.encode("admin"));
+        //System.out.println("BCrypt(admin) = " + encoder.encode("admin"));
     }
 }

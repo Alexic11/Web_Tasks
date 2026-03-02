@@ -107,9 +107,31 @@ public class BoardView extends View {
 
         Button closeBoard = new Button("Zatvori", VaadinIcon.LOCK.create());
         closeBoard.addClickListener(e -> {
+            long openCnt;
+            try {
+                openCnt = services.cardService.countOpenTasks(boardId);
+            } catch (Exception ex) {
+                Notification.show(ex.getMessage());
+                return;
+            }
+
+            // ✅ Ako ima otvorenih taskova -> samo info dialog
+            if (openCnt > 0) {
+                ConfirmDialog info = new ConfirmDialog();
+                info.setHeader("Ne možeš zatvoriti board");
+                info.setText("Board '" + board.getName() + "' ima još otvorenih taskova: " + openCnt +
+                        ". Premjesti sve taskove u Done pa pokušaj ponovo.");
+                info.setConfirmText("OK");
+                info.setConfirmButtonTheme("primary");
+                info.setCancelable(false);
+                info.open();
+                return;
+            }
+
+            // ✅ Ako nema otvorenih taskova -> standard confirm
             ConfirmDialog cd = new ConfirmDialog();
             cd.setHeader("Zatvori board?");
-            cd.setText("Jesi li siguran da želiš zatvoriti ovaj board? Board će preći u History.");
+            cd.setText("Jesi li siguran da želiš zatvoriti board '" + board.getName() + "' ? Board će preći u History.");
             cd.setCancelable(true);
 
             cd.setConfirmText("Zatvori");
@@ -118,7 +140,7 @@ public class BoardView extends View {
             cd.addConfirmListener(ev -> {
                 try {
                     services.boardService.archiveBoard(boardId, loggedUser.getId());
-                    Notification.show("Board zatvoren.");
+                    Notification.show("Board '" + board.getName() + "' je zatvoren.");
                     MainView.getMainView().setContent(new BoardsView());
                 } catch (Exception ex) {
                     Notification.show(ex.getMessage());
@@ -127,6 +149,8 @@ public class BoardView extends View {
 
             cd.open();
         });
+
+
         closeBoard.setVisible(canArchive);
 
 
@@ -302,15 +326,34 @@ public class BoardView extends View {
 
         Button left = new Button(VaadinIcon.ARROW_LEFT.create(), e -> {
             if (idx == 0) return;
-            services.cardService.moveToList(c.getId(), allLists.get(idx - 1).getId());
-            MainView.getMainView().setContent(new BoardView(boardId));
+
+            try {
+                services.cardService.moveToList(
+                        c.getId(),
+                        allLists.get(idx - 1).getId(),
+                        loggedUser.getId()
+                );
+                MainView.getMainView().setContent(new BoardView(boardId));
+            } catch (Exception ex) {
+                Notification.show(ex.getMessage());
+            }
         });
 
         Button right = new Button(VaadinIcon.ARROW_RIGHT.create(), e -> {
             if (idx >= allLists.size() - 1) return;
-            services.cardService.moveToList(c.getId(), allLists.get(idx + 1).getId());
-            MainView.getMainView().setContent(new BoardView(boardId));
+
+            try {
+                services.cardService.moveToList(
+                        c.getId(),
+                        allLists.get(idx + 1).getId(),
+                        loggedUser.getId()
+                );
+                MainView.getMainView().setContent(new BoardView(boardId));
+            } catch (Exception ex) {
+                Notification.show(ex.getMessage());
+            }
         });
+
 
         left.setEnabled(idx > 0);
         right.setEnabled(idx < allLists.size() - 1);

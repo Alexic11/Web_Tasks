@@ -3,11 +3,13 @@ package carobnifrulas.web_tasks.ui.views;
 import carobnifrulas.web_tasks.board.BoardMemberRepository;
 import carobnifrulas.web_tasks.board.BoardRole;
 import carobnifrulas.web_tasks.card.Card;
+import carobnifrulas.web_tasks.card.activity.CardActivity;
 import carobnifrulas.web_tasks.services.ServicesHolder;
 import carobnifrulas.web_tasks.ui.MainView;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.datetimepicker.DateTimePicker;
+import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.html.H4;
 import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
@@ -17,11 +19,15 @@ import com.vaadin.flow.component.textfield.TextArea;
 import com.vaadin.flow.component.textfield.TextField;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
 public class TaskDialog extends Dialog {
+
+    private static final DateTimeFormatter DT_FMT = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
 
     private final ServicesHolder services;
     private final Long boardId;
@@ -88,7 +94,6 @@ public class TaskDialog extends Dialog {
         assignedTo.setEmptySelectionAllowed(true);
         assignedTo.setEmptySelectionCaption("— niko —");
 
-        // učitaj članove boarda (id + fullName + email)
         List<BoardMemberRepository.AssigneeRow> rows = services.boardMemberService.listAssignees(boardId);
 
         Map<Long, String> labels = rows.stream().collect(Collectors.toMap(
@@ -106,9 +111,8 @@ public class TaskDialog extends Dialog {
         if (isEdit) {
             title.setValue(nullSafe(existing.getTitle()));
             desc.setValue(nullSafe(existing.getDescription()));
-            due.setValue(existing.getDueAt());                 // može null
-            assignedTo.setValue(existing.getAssignedTo());    // može null
-
+            due.setValue(existing.getDueAt());
+            assignedTo.setValue(existing.getAssignedTo());
             Integer p = existing.getPriority();
             priority.setValue(p == null ? 1 : p);
         }
@@ -121,17 +125,15 @@ public class TaskDialog extends Dialog {
 
         Button save = new Button("Sačuvaj");
         Button cancel = new Button("Otkaži", e -> close());
-
         save.setEnabled(canWrite);
 
         save.addClickListener(e -> {
             try {
-                LocalDateTime dueVal = due.getValue();      // može null
-                Long assigneeId = assignedTo.getValue();    // može null
-                Integer pr = priority.getValue();           // ne bi trebalo null, ali može ako user obriše
+                LocalDateTime dueVal = due.getValue();
+                Long assigneeId = assignedTo.getValue();
+                Integer pr = priority.getValue();
 
                 if (!isEdit) {
-                    // ✅ createCard proširen da prima priority
                     services.cardService.createCard(
                             boardId, listId,
                             title.getValue(),
@@ -142,7 +144,6 @@ public class TaskDialog extends Dialog {
                             actorUserId
                     );
                 } else {
-                    // ✅ updateCard proširen da prima priority
                     services.cardService.updateCard(
                             existing.getId(),
                             actorUserId,
@@ -181,9 +182,63 @@ public class TaskDialog extends Dialog {
         content.setWidthFull();
 
         add(content);
+
+        // =========================
+        // ✅ ACTIVITY (samo edit)
+        // =========================
+        if (isEdit) {
+            Grid<CardActivity> activityGrid = new Grid<>(CardActivity.class, false);
+            activityGrid.setWidthFull();
+            activityGrid.setAllRowsVisible(true);
+
+            activityGrid.addColumn(a -> formatInstant(a.getCreatedAt()))
+                    .setHeader("Vrijeme")
+                    .setAutoWidth(true)
+                    .setFlexGrow(0);
+
+            activityGrid.addColumn(CardActivity::getActorEmail)
+                    .setHeader("Ko")
+                    .setAutoWidth(true)
+                    .setFlexGrow(1);
+
+            activityGrid.addColumn(CardActivity::getAction)
+                    .setHeader("Akcija")
+                    .setAutoWidth(true)
+                    .setFlexGrow(0);
+
+            activityGrid.addColumn(a -> nullSafe(a.getOldValue()))
+                    .setHeader("Staro")
+                    .setAutoWidth(true)
+                    .setFlexGrow(1);
+
+            activityGrid.addColumn(a -> nullSafe(a.getNewValue()))
+                    .setHeader("Novo")
+                    .setAutoWidth(true)
+                    .setFlexGrow(1);
+
+            List<CardActivity> acts = services.cardActivityService.listForCard(existing.getId());
+            activityGrid.setItems(acts);
+
+            VerticalLayout activityWrap = new VerticalLayout(
+                    new H4("Activity"),
+                    activityGrid
+            );
+            activityWrap.setPadding(false);
+            activityWrap.setSpacing(true);
+            activityWrap.setWidthFull();
+
+            add(activityWrap);
+        }
     }
 
     private static String nullSafe(String s) {
         return s == null ? "" : s;
+    }
+
+    private static String formatInstant(java.time.Instant ins) {
+        if (ins == null) return "—";
+        // pretvori u LocalDateTime po lokalnoj zoni servera
+        LocalDateTime dt = LocalDateTime.ofInstant(ins, ZoneId.systemDefault());
+        return DT_FMT.format(dt);
     }
 }

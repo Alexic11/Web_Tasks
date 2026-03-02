@@ -78,9 +78,31 @@ public class BoardsView extends View implements MenuTab {
             }
 
             close.addClickListener(e -> {
+                long openCnt;
+                try {
+                    openCnt = services.cardService.countOpenTasks(b.getId());
+                } catch (Exception ex) {
+                    Notification.show(ex.getMessage());
+                    return;
+                }
+
+                // ✅ Ako ima otvorenih taskova -> samo info dialog
+                if (openCnt > 0) {
+                    ConfirmDialog info = new ConfirmDialog();
+                    info.setHeader("Ne možeš zatvoriti board");
+                    info.setText("Board '" + b.getName() + "' ima još otvorenih taskova: " + openCnt +
+                            ". Premjesti sve taskove u Done pa pokušaj ponovo.");
+                    info.setConfirmText("OK");
+                    info.setConfirmButtonTheme("primary");
+                    info.setCancelable(false);
+                    info.open();
+                    return;
+                }
+
+                // ✅ Ako nema otvorenih taskova -> standard confirm
                 ConfirmDialog cd = new ConfirmDialog();
                 cd.setHeader("Zatvori board?");
-                cd.setText("Jesi li siguran da želiš zatvoriti ovaj board? Board će preći u History.");
+                cd.setText("Jesi li siguran da želiš zatvoriti board '" + b.getName() + "' ? Board će preći u History.");
                 cd.setCancelable(true);
 
                 cd.setConfirmText("Zatvori");
@@ -89,7 +111,7 @@ public class BoardsView extends View implements MenuTab {
                 cd.addConfirmListener(ev -> {
                     try {
                         services.boardService.archiveBoard(b.getId(), loggedUser.getId());
-                        Notification.show("Board zatvoren.");
+                        Notification.show("Board '" + b.getName() + "' je zatvoren.");
                         refresh();
                     } catch (Exception ex) {
                         Notification.show(ex.getMessage());
@@ -98,6 +120,8 @@ public class BoardsView extends View implements MenuTab {
 
                 cd.open();
             });
+
+
 
             return close;
         }).setHeader("Zatvori").setAutoWidth(true);

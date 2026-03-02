@@ -1,6 +1,7 @@
 package carobnifrulas.web_tasks.card;
 
 import carobnifrulas.web_tasks.board.BoardMemberService;
+import carobnifrulas.web_tasks.card.activity.CardActivityService;
 import carobnifrulas.web_tasks.list.ListService;
 import carobnifrulas.web_tasks.security.model.AppUserService;
 import carobnifrulas.web_tasks.user.User;
@@ -17,16 +18,19 @@ public class CardService {
     private final CardRepository cards;
     private final BoardMemberService boardMemberService;
     private final ListService lists;
-    private final AppUserService userService; // ✅ da nema ServicesHolder null problema
+    private final AppUserService userService;
+    private final CardActivityService activity;
 
     public CardService(CardRepository cards,
                        BoardMemberService boardMemberService,
                        ListService lists,
-                       AppUserService userService) {
+                       AppUserService userService,
+                       CardActivityService activity) {
         this.cards = cards;
         this.boardMemberService = boardMemberService;
         this.lists = lists;
         this.userService = userService;
+        this.activity = activity;
     }
 
     public List<Card> findByList(Long listId) {
@@ -42,6 +46,8 @@ public class CardService {
         return cards.findByAssignedToAndArchivedAtIsNullOrderByUpdatedAtDesc(userId);
     }
 
+    // ================== ASSIGN / UNASSIGN ==================
+
     @Transactional
     public void assignToMe(Long cardId, Long myUserId) {
         Card c = requireById(cardId);
@@ -49,10 +55,14 @@ public class CardService {
         if (!canWriteOrGlobalAdmin(c.getBoardId(), myUserId)) {
             throw new IllegalStateException("Nemaš prava da mijenjaš task na ovom boardu.");
         }
+        if (c.getAssignedTo() != null) {
+            throw new IllegalStateException("Task je već preuzet.");
+        }
 
-        if (c.getAssignedTo() != null) throw new IllegalStateException("Task je već preuzet.");
         c.setAssignedTo(myUserId);
         cards.save(c);
+
+        activity.logAssign(c.getId(), myUserId, myUserId);
     }
 
     @Transactional
@@ -64,12 +74,20 @@ public class CardService {
         }
 
         if (c.getAssignedTo() == null) return;
-        if (!c.getAssignedTo().equals(myUserId) && !isGlobalAdmin(myUserId)) {
+
+        Long oldAssignee = c.getAssignedTo();
+
+        if (!oldAssignee.equals(myUserId) && !isGlobalAdmin(myUserId)) {
             throw new IllegalStateException("Nije tvoj task.");
         }
+
         c.setAssignedTo(null);
         cards.save(c);
+
+        activity.logUnassign(c.getId(), myUserId, oldAssignee);
     }
+
+    // ================== MOVE LIST ==================
 
     @Transactional
     public void moveToList(Long cardId, Long targetListId, Long actorUserId) {
@@ -79,20 +97,24 @@ public class CardService {
             throw new IllegalStateException("Nemaš prava da mijenjaš task na ovom boardu.");
         }
 
+        Long fromListId = c.getListId();
+        if (fromListId != null && fromListId.equals(targetListId)) return;
+
+        c.setListId(targetListId);
+        cards.save(c);
+
+        activity.logMoveList(c.getId(), actorUserId, fromListId, targetListId);
+    }
+
+    // ⚠️ Ostavljeno radi kompatibilnosti sa starim pozivima, ali bez security/log
+    @Transactional
+    public void moveToList(Long cardId, Long targetListId) {
+        Card c = requireById(cardId);
         c.setListId(targetListId);
         cards.save(c);
     }
 
-    // ✅ zadržao sam tvoj API, ali interno zovemo secure varijantu
-    @Transactional
-    public void moveToList(Long cardId, Long targetListId) {
-        Card c = requireById(cardId);
-        // Ova metoda ostaje zbog postojećih poziva (markDone),
-        // ali je "unsafe" ako je neko pozove direktno bez provjere.
-        // Preporuka: vremenom ukloniti i koristiti samo varijantu sa actorUserId.
-        c.setListId(targetListId);
-        cards.save(c);
-    }
+    // ================== CREATE / UPDATE ==================
 
     @Transactional
     public Card createCard(Long boardId,
@@ -130,7 +152,28 @@ public class CardService {
         c.setCreatedBy(createdByUserId);
         c.setPosition(pos);
 
-        return cards.save(c);
+        // ✅ prvo save da dobije ID
+        Card saved = cards.save(c);
+
+        // ✅ log create
+        activity.logCreated(saved.getId(), createdByUserId, saved.getTitle());
+
+        // ✅ ako je odmah dodijeljen, log assign
+        if (saved.getAssignedTo() != null) {
+            activity.logAssign(saved.getId(), createdByUserId, saved.getAssignedTo());
+        }
+
+        // ✅ ako je rok odmah postavljen
+        if (saved.getDueAt() != null) {
+            activity.logDueChange(saved.getId(), createdByUserId, null, saved.getDueAt());
+        }
+
+        // ✅ ako je prioritet != 1
+        if (saved.getPriority() != null && saved.getPriority() != 1) {
+            activity.logPriorityChange(saved.getId(), createdByUserId, 1, saved.getPriority());
+        }
+
+        return saved;
     }
 
     @Transactional
@@ -152,18 +195,49 @@ public class CardService {
             boardMemberService.requireMember(c.getBoardId(), assignedToUserId);
         }
 
+        // OLD values
+        Integer oldPr = c.getPriority();
+        LocalDateTime oldDue = c.getDueAt();
+        Long oldAssignee = c.getAssignedTo();
+        String oldTitle = c.getTitle();
+        String oldDesc = c.getDescription();
+
+        // SET new
         c.setAssignedTo(assignedToUserId);
         c.setTitle(normalizeTitle(title));
         c.setDescription(blankToNull(description));
         c.setDueAt(dueAt);
         c.setPriority(normalizePriority(priority));
 
-        return cards.save(c);
+        Card saved = cards.save(c);
+
+        // LOG diffs
+        if (!eqInt(oldPr, saved.getPriority())) {
+            activity.logPriorityChange(saved.getId(), actorUserId, oldPr, saved.getPriority());
+        }
+
+        if (!eqDt(oldDue, saved.getDueAt())) {
+            activity.logDueChange(saved.getId(), actorUserId, oldDue, saved.getDueAt());
+        }
+
+        if (!eqLong(oldAssignee, saved.getAssignedTo())) {
+            if (saved.getAssignedTo() == null) {
+                activity.logUnassign(saved.getId(), actorUserId, oldAssignee);
+            } else {
+                activity.logAssign(saved.getId(), actorUserId, saved.getAssignedTo());
+            }
+        }
+
+        boolean titleChanged = !safeStr(oldTitle).equals(safeStr(saved.getTitle()));
+        boolean descChanged = !safeStr(oldDesc).equals(safeStr(saved.getDescription()));
+        if (titleChanged || descChanged) {
+            activity.logUpdated(saved.getId(), actorUserId, "Promijenjeni detalji (naslov/opis).");
+        }
+
+        return saved;
     }
 
-    public List<CardRepository.MyTaskRow> findMyTasks(Long userId) {
-        return cards.findMyTasks(userId);
-    }
+    // ================== DONE ==================
 
     @Transactional
     public void markDone(Long cardId, Long actorUserId) {
@@ -171,26 +245,114 @@ public class CardService {
 
         boolean globalAdmin = isGlobalAdmin(actorUserId);
 
-        // ako nije global admin, mora imati write (OWNER/ADMIN/MEMBER)
         if (!globalAdmin && !boardMemberService.canWrite(c.getBoardId(), actorUserId)) {
             throw new IllegalStateException("Nemaš prava da mijenjaš task na ovom boardu.");
         }
 
-        // ako nije global admin, samo assignee može završiti task (ako je task dodijeljen)
         if (!globalAdmin && c.getAssignedTo() != null && !c.getAssignedTo().equals(actorUserId)) {
             throw new IllegalStateException("Samo assignee može završiti task.");
         }
 
         Long doneListId = lists.requireLastListId(c.getBoardId());
+        Long fromListId = c.getListId();
 
-        if (!doneListId.equals(c.getListId())) {
-            moveToList(c.getId(), doneListId); // koristi postojeću logiku
+        if (!doneListId.equals(fromListId)) {
+            c.setListId(doneListId);
+            cards.save(c);
+
+            // ✅ specijalni DONE log (da ne dupliramo MOVED_LIST)
+            activity.logDone(c.getId(), actorUserId, fromListId, doneListId);
         }
+    }
+
+    // ================== MY TASKS / DASHBOARD ==================
+
+    public List<CardRepository.MyTaskRow> findMyTasks(Long userId) {
+        return cards.findMyTasks(userId);
     }
 
     public List<CardRepository.TaskRow> listTaskRowsForDashboard(User loggedUser) {
         boolean globalAdmin = "admin@local".equalsIgnoreCase(loggedUser.getEmail());
         return cards.findTaskRows(globalAdmin ? null : loggedUser.getId());
+    }
+
+    // ================== REORDER (DnD) ==================
+
+    @Transactional
+    public void reorderWithinList(Long cardId, Long listId, int targetIndex, Long actorUserId) {
+        Card moving = requireById(cardId);
+
+        if (!canWriteOrGlobalAdmin(moving.getBoardId(), actorUserId)) {
+            throw new IllegalStateException("Nemaš prava da mijenjaš task na ovom boardu.");
+        }
+
+        Long oldListId = moving.getListId();
+        BigDecimal oldPos = moving.getPosition();
+
+        List<Card> items = cards.findByListIdAndArchivedAtIsNullOrderByPositionAsc(listId);
+        items.removeIf(c -> c.getId().equals(cardId));
+
+        if (targetIndex < 0) targetIndex = 0;
+        if (targetIndex > items.size()) targetIndex = items.size();
+
+        BigDecimal newPos;
+        if (items.isEmpty()) {
+            newPos = new BigDecimal("1000.000000");
+        } else if (targetIndex == 0) {
+            newPos = items.get(0).getPosition().subtract(new BigDecimal("1000.000000"));
+        } else if (targetIndex == items.size()) {
+            newPos = items.get(items.size() - 1).getPosition().add(new BigDecimal("1000.000000"));
+        } else {
+            BigDecimal prev = items.get(targetIndex - 1).getPosition();
+            BigDecimal next = items.get(targetIndex).getPosition();
+            newPos = prev.add(next).divide(new BigDecimal("2"), java.math.RoundingMode.HALF_UP);
+
+            if (newPos.equals(prev) || newPos.equals(next)) {
+                reindexList(listId);
+                items = cards.findByListIdAndArchivedAtIsNullOrderByPositionAsc(listId);
+                items.removeIf(c -> c.getId().equals(cardId));
+
+                if (targetIndex == 0) {
+                    newPos = items.get(0).getPosition().subtract(new BigDecimal("1000.000000"));
+                } else if (targetIndex == items.size()) {
+                    newPos = items.get(items.size() - 1).getPosition().add(new BigDecimal("1000.000000"));
+                } else {
+                    BigDecimal p2 = items.get(targetIndex - 1).getPosition();
+                    BigDecimal n2 = items.get(targetIndex).getPosition();
+                    newPos = p2.add(n2).divide(new BigDecimal("2"), java.math.RoundingMode.HALF_UP);
+                }
+            }
+        }
+
+        moving.setListId(listId);
+        moving.setPosition(newPos);
+        cards.save(moving);
+
+        // ✅ ako je promijenio listu (DnD u drugu kolonu) -> MOVED_LIST
+        if (oldListId != null && !oldListId.equals(listId)) {
+            activity.logMoveList(moving.getId(), actorUserId, oldListId, listId);
+        } else {
+            // ✅ reorder unutar iste liste
+            activity.logReorder(moving.getId(), actorUserId, oldPos, newPos);
+        }
+    }
+
+    @Transactional
+    public void reindexList(Long listId) {
+        List<Card> items = cards.findByListIdAndArchivedAtIsNullOrderByPositionAsc(listId);
+        BigDecimal pos = new BigDecimal("1000.000000");
+        for (Card c : items) {
+            c.setPosition(pos);
+            pos = pos.add(new BigDecimal("1000.000000"));
+        }
+        cards.saveAll(items);
+    }
+
+    // ================== BOARD CLOSE SUPPORT ==================
+
+    public long countOpenTasks(Long boardId) {
+        Long doneListId = lists.requireLastListId(boardId);
+        return cards.countOpenInBoard(boardId, doneListId);
     }
 
     // ================= helpers =================
@@ -226,67 +388,19 @@ public class CardService {
         return t.isEmpty() ? null : t;
     }
 
-    @Transactional
-    public void reorderWithinList(Long cardId, Long listId, int targetIndex, Long actorUserId) {
-        Card moving = requireById(cardId);
-
-        if (!canWriteOrGlobalAdmin(moving.getBoardId(), actorUserId)) {
-            throw new IllegalStateException("Nemaš prava da mijenjaš task na ovom boardu.");
-        }
-
-        // Učitaj sve u listi po position
-        List<Card> items = cards.findByListIdAndArchivedAtIsNullOrderByPositionAsc(listId);
-
-        // izbaci moving iz liste ako je već tu
-        items.removeIf(c -> c.getId().equals(cardId));
-
-        if (targetIndex < 0) targetIndex = 0;
-        if (targetIndex > items.size()) targetIndex = items.size();
-
-        BigDecimal newPos;
-        if (items.isEmpty()) {
-            newPos = new BigDecimal("1000.000000");
-        } else if (targetIndex == 0) {
-            newPos = items.get(0).getPosition().subtract(new BigDecimal("1000.000000"));
-        } else if (targetIndex == items.size()) {
-            newPos = items.get(items.size() - 1).getPosition().add(new BigDecimal("1000.000000"));
-        } else {
-            BigDecimal prev = items.get(targetIndex - 1).getPosition();
-            BigDecimal next = items.get(targetIndex).getPosition();
-            newPos = prev.add(next).divide(new BigDecimal("2"), java.math.RoundingMode.HALF_UP);
-
-            // ako su preblizu (rijetko), reindex cijelu listu
-            if (newPos.equals(prev) || newPos.equals(next)) {
-                reindexList(listId);
-                items = cards.findByListIdAndArchivedAtIsNullOrderByPositionAsc(listId);
-                items.removeIf(c -> c.getId().equals(cardId));
-
-                if (targetIndex == 0) {
-                    newPos = items.get(0).getPosition().subtract(new BigDecimal("1000.000000"));
-                } else if (targetIndex == items.size()) {
-                    newPos = items.get(items.size() - 1).getPosition().add(new BigDecimal("1000.000000"));
-                } else {
-                    BigDecimal p2 = items.get(targetIndex - 1).getPosition();
-                    BigDecimal n2 = items.get(targetIndex).getPosition();
-                    newPos = p2.add(n2).divide(new BigDecimal("2"), java.math.RoundingMode.HALF_UP);
-                }
-            }
-        }
-
-        moving.setListId(listId);
-        moving.setPosition(newPos);
-        cards.save(moving);
+    private static boolean eqInt(Integer a, Integer b) {
+        return a == null ? b == null : a.equals(b);
     }
 
-    @Transactional
-    public void reindexList(Long listId) {
-        List<Card> items = cards.findByListIdAndArchivedAtIsNullOrderByPositionAsc(listId);
-        BigDecimal pos = new BigDecimal("1000.000000");
-        for (Card c : items) {
-            c.setPosition(pos);
-            pos = pos.add(new BigDecimal("1000.000000"));
-        }
-        cards.saveAll(items);
+    private static boolean eqLong(Long a, Long b) {
+        return a == null ? b == null : a.equals(b);
     }
 
+    private static boolean eqDt(LocalDateTime a, LocalDateTime b) {
+        return a == null ? b == null : a.equals(b);
+    }
+
+    private static String safeStr(String s) {
+        return s == null ? "" : s;
+    }
 }
