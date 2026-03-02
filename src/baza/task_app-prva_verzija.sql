@@ -42,7 +42,7 @@ CREATE TABLE `board_members` (
 
 LOCK TABLES `board_members` WRITE;
 /*!40000 ALTER TABLE `board_members` DISABLE KEYS */;
-INSERT INTO `board_members` VALUES (1,1,'OWNER','2026-02-25 07:42:02'),(1,3,'MEMBER','2026-02-26 08:11:06'),(5,2,'MEMBER','2026-02-26 11:10:15'),(5,3,'OWNER','2026-02-26 10:15:42'),(6,2,'MEMBER','2026-03-02 14:00:07'),(6,3,'OWNER','2026-02-26 13:58:38'),(7,1,'OWNER','2026-02-27 14:09:56'),(8,3,'OWNER','2026-03-02 08:00:31'),(9,3,'OWNER','2026-03-02 08:00:43');
+INSERT INTO `board_members` VALUES (1,1,'OWNER','2026-02-25 07:42:02'),(1,3,'MEMBER','2026-02-26 08:11:06'),(5,2,'MEMBER','2026-02-26 11:10:15'),(5,3,'OWNER','2026-02-26 10:15:42'),(6,3,'OWNER','2026-02-26 13:58:38'),(7,1,'OWNER','2026-02-27 14:09:56');
 /*!40000 ALTER TABLE `board_members` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -57,10 +57,8 @@ CREATE TABLE `boards` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `name` varchar(120) COLLATE utf8mb4_unicode_ci NOT NULL,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `archived_at` datetime DEFAULT NULL,
-  PRIMARY KEY (`id`),
-  KEY `idx_boards_archived_at` (`archived_at`)
-) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -69,70 +67,8 @@ CREATE TABLE `boards` (
 
 LOCK TABLES `boards` WRITE;
 /*!40000 ALTER TABLE `boards` DISABLE KEYS */;
-INSERT INTO `boards` VALUES (1,'Moj prvi board','2026-02-25 07:42:02',NULL),(5,'novi','2026-02-26 10:15:42',NULL),(6,'najnovije','2026-02-26 13:58:38',NULL),(7,'hej','2026-02-27 14:09:56',NULL),(8,'a','2026-03-02 08:00:31','2026-03-02 12:37:17'),(9,'v','2026-03-02 08:00:43','2026-03-02 09:10:03');
+INSERT INTO `boards` VALUES (1,'Moj prvi board','2026-02-25 07:42:02'),(5,'novi','2026-02-26 10:15:42'),(6,'najnovije','2026-02-26 13:58:38'),(7,'hej','2026-02-27 14:09:56');
 /*!40000 ALTER TABLE `boards` ENABLE KEYS */;
-UNLOCK TABLES;
-
---
--- Table structure for table `card_activity`
---
-
-DROP TABLE IF EXISTS `card_activity`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!50503 SET character_set_client = utf8mb4 */;
-CREATE TABLE `card_activity` (
-  `id` bigint NOT NULL AUTO_INCREMENT,
-  `card_id` bigint NOT NULL,
-  `actor_user_id` bigint NOT NULL,
-  `actor_email` varchar(190) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `action` varchar(40) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `old_value` text COLLATE utf8mb4_unicode_ci,
-  `new_value` text COLLATE utf8mb4_unicode_ci,
-  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  KEY `idx_ca_card_created` (`card_id`,`created_at`)
-) ENGINE=InnoDB AUTO_INCREMENT=16 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-/*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Dumping data for table `card_activity`
---
-
-LOCK TABLES `card_activity` WRITE;
-/*!40000 ALTER TABLE `card_activity` DISABLE KEYS */;
-INSERT INTO `card_activity` VALUES (1,9,3,'marija@gmail.com','CREATED',NULL,'Task: logic','2026-03-02 12:24:09'),(2,9,3,'marija@gmail.com','ASSIGNED',NULL,'marija@gmail.com','2026-03-02 12:24:09'),(3,9,3,'marija@gmail.com','DUE_CHANGED','—','03.04.2026 05:00','2026-03-02 12:24:09'),(4,9,3,'marija@gmail.com','PRIORITY_CHANGED','P1','P5','2026-03-02 12:24:09'),(5,9,3,'marija@gmail.com','PRIORITY_CHANGED','P5','P1','2026-03-02 12:24:49'),(6,9,3,'marija@gmail.com','UNASSIGNED','marija@gmail.com',NULL,'2026-03-02 12:25:10'),(7,9,3,'marija@gmail.com','ASSIGNED',NULL,'marija@gmail.com','2026-03-02 12:25:14'),(8,9,3,'marija@gmail.com','MOVED_LIST','To do','Doing','2026-03-02 12:30:56'),(9,9,3,'marija@gmail.com','MOVED_LIST','Doing','To do','2026-03-02 12:31:03'),(10,9,3,'marija@gmail.com','MOVED_LIST','To do','Done','2026-03-02 12:37:05'),(11,10,3,'marija@gmail.com','CREATED',NULL,'Task: ai','2026-03-02 13:59:21'),(12,10,3,'marija@gmail.com','ASSIGNED',NULL,'marija@gmail.com','2026-03-02 13:59:21'),(13,10,3,'marija@gmail.com','DUE_CHANGED','—','02.04.2026 04:00','2026-03-02 13:59:21'),(14,10,3,'marija@gmail.com','COMMENTED',NULL,'komentar','2026-03-02 13:59:40'),(15,10,2,'milan@gmail.com','COMMENTED',NULL,'kom','2026-03-02 14:00:24');
-/*!40000 ALTER TABLE `card_activity` ENABLE KEYS */;
-UNLOCK TABLES;
-
---
--- Table structure for table `card_comments`
---
-
-DROP TABLE IF EXISTS `card_comments`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!50503 SET character_set_client = utf8mb4 */;
-CREATE TABLE `card_comments` (
-  `id` bigint NOT NULL AUTO_INCREMENT,
-  `card_id` bigint NOT NULL,
-  `author_user_id` bigint NOT NULL,
-  `body` text COLLATE utf8mb4_unicode_ci NOT NULL,
-  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  KEY `idx_cc_card_time` (`card_id`,`created_at`),
-  KEY `fk_cc_author` (`author_user_id`),
-  CONSTRAINT `fk_cc_author` FOREIGN KEY (`author_user_id`) REFERENCES `users` (`id`) ON DELETE RESTRICT,
-  CONSTRAINT `fk_cc_card` FOREIGN KEY (`card_id`) REFERENCES `cards` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-/*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Dumping data for table `card_comments`
---
-
-LOCK TABLES `card_comments` WRITE;
-/*!40000 ALTER TABLE `card_comments` DISABLE KEYS */;
-INSERT INTO `card_comments` VALUES (1,10,3,'komentar','2026-03-02 12:59:41'),(2,10,2,'kom','2026-03-02 13:00:24');
-/*!40000 ALTER TABLE `card_comments` ENABLE KEYS */;
 UNLOCK TABLES;
 
 --
@@ -166,7 +102,7 @@ CREATE TABLE `cards` (
   CONSTRAINT `fk_card_created_by` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`),
   CONSTRAINT `fk_card_list` FOREIGN KEY (`list_id`) REFERENCES `lists` (`id`),
   CONSTRAINT `chk_cards_priority` CHECK ((`priority` between 1 and 5))
-) ENGINE=InnoDB AUTO_INCREMENT=11 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -175,7 +111,7 @@ CREATE TABLE `cards` (
 
 LOCK TABLES `cards` WRITE;
 /*!40000 ALTER TABLE `cards` DISABLE KEYS */;
-INSERT INTO `cards` VALUES (1,1,1,'Prvi task','Ovo je test kartica','2026-03-04 19:00:00',1,NULL,1000.000000,NULL,'2026-02-25 07:42:02','2026-02-26 13:51:33',1),(2,5,5,'zad','uradi','2026-02-27 05:00:00',3,3,1000.000000,NULL,'2026-02-26 10:29:43','2026-03-02 07:39:45',1),(3,5,6,'zad2','uradi2','2026-02-27 20:00:00',3,3,2000.000000,NULL,'2026-02-26 10:35:50','2026-02-26 14:39:42',1),(4,5,4,'z','z',NULL,3,3,2000.000000,NULL,'2026-02-26 10:51:58','2026-02-26 11:09:26',1),(5,5,4,'x','x',NULL,3,2,3000.000000,NULL,'2026-02-26 11:10:25','2026-02-26 11:11:07',1),(6,5,6,'gotov','log',NULL,2,2,1000.000000,NULL,'2026-02-26 11:13:17','2026-02-26 11:13:17',1),(7,7,10,'a','a','2026-03-06 02:00:00',1,1,1000.000000,NULL,'2026-02-27 14:10:08','2026-02-27 15:00:54',5),(8,9,18,'moj','a',NULL,3,3,1000.000000,NULL,'2026-03-02 09:09:57','2026-03-02 09:09:57',1),(9,8,15,'logic','log','2026-04-03 03:00:00',3,3,1000.000000,NULL,'2026-03-02 12:24:09','2026-03-02 12:37:05',1),(10,6,7,'ai','ai','2026-04-02 02:00:00',3,3,1000.000000,NULL,'2026-03-02 13:59:21','2026-03-02 13:59:21',1);
+INSERT INTO `cards` VALUES (1,1,1,'Prvi task','Ovo je test kartica','2026-03-04 19:00:00',1,NULL,1000.000000,NULL,'2026-02-25 07:42:02','2026-02-26 13:51:33',1),(2,5,6,'zad','uradi','2026-02-27 05:00:00',3,3,1000.000000,NULL,'2026-02-26 10:29:43','2026-02-26 13:38:54',1),(3,5,6,'zad2','uradi2','2026-02-27 20:00:00',3,3,2000.000000,NULL,'2026-02-26 10:35:50','2026-02-26 14:39:42',1),(4,5,4,'z','z',NULL,3,3,2000.000000,NULL,'2026-02-26 10:51:58','2026-02-26 11:09:26',1),(5,5,4,'x','x',NULL,3,2,3000.000000,NULL,'2026-02-26 11:10:25','2026-02-26 11:11:07',1),(6,5,6,'gotov','log',NULL,2,2,1000.000000,NULL,'2026-02-26 11:13:17','2026-02-26 11:13:17',1),(7,7,10,'a','a','2026-03-06 02:00:00',1,1,1000.000000,NULL,'2026-02-27 14:10:08','2026-02-27 15:00:54',5);
 /*!40000 ALTER TABLE `cards` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -195,7 +131,7 @@ CREATE TABLE `lists` (
   PRIMARY KEY (`id`),
   KEY `idx_lists_board_pos` (`board_id`,`position`),
   CONSTRAINT `fk_list_board` FOREIGN KEY (`board_id`) REFERENCES `boards` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=19 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=13 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -204,7 +140,7 @@ CREATE TABLE `lists` (
 
 LOCK TABLES `lists` WRITE;
 /*!40000 ALTER TABLE `lists` DISABLE KEYS */;
-INSERT INTO `lists` VALUES (1,1,'To do',1000.000000,'2026-02-25 07:42:02'),(2,1,'Doing',2000.000000,'2026-02-25 07:42:02'),(3,1,'Done',3000.000000,'2026-02-25 07:42:02'),(4,5,'To do',1000.000000,'2026-02-26 10:29:20'),(5,5,'Doing',2000.000000,'2026-02-26 10:29:20'),(6,5,'Done',3000.000000,'2026-02-26 10:29:20'),(7,6,'To do',1000.000000,'2026-02-26 13:58:38'),(8,6,'Doing',2000.000000,'2026-02-26 13:58:38'),(9,6,'Done',3000.000000,'2026-02-26 13:58:38'),(10,7,'To do',1000.000000,'2026-02-27 14:09:56'),(11,7,'Doing',2000.000000,'2026-02-27 14:09:56'),(12,7,'Done',3000.000000,'2026-02-27 14:09:56'),(13,8,'To do',1000.000000,'2026-03-02 08:00:31'),(14,8,'Doing',2000.000000,'2026-03-02 08:00:31'),(15,8,'Done',3000.000000,'2026-03-02 08:00:31'),(16,9,'To do',1000.000000,'2026-03-02 08:00:43'),(17,9,'Doing',2000.000000,'2026-03-02 08:00:43'),(18,9,'Done',3000.000000,'2026-03-02 08:00:43');
+INSERT INTO `lists` VALUES (1,1,'To do',1000.000000,'2026-02-25 07:42:02'),(2,1,'Doing',2000.000000,'2026-02-25 07:42:02'),(3,1,'Done',3000.000000,'2026-02-25 07:42:02'),(4,5,'To do',1000.000000,'2026-02-26 10:29:20'),(5,5,'Doing',2000.000000,'2026-02-26 10:29:20'),(6,5,'Done',3000.000000,'2026-02-26 10:29:20'),(7,6,'To do',1000.000000,'2026-02-26 13:58:38'),(8,6,'Doing',2000.000000,'2026-02-26 13:58:38'),(9,6,'Done',3000.000000,'2026-02-26 13:58:38'),(10,7,'To do',1000.000000,'2026-02-27 14:09:56'),(11,7,'Doing',2000.000000,'2026-02-27 14:09:56'),(12,7,'Done',3000.000000,'2026-02-27 14:09:56');
 /*!40000 ALTER TABLE `lists` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -254,4 +190,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-03-02 15:41:13
+-- Dump completed on 2026-03-02  8:09:57
