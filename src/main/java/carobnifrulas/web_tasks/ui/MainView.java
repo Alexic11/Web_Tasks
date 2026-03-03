@@ -16,6 +16,7 @@ import com.vaadin.flow.component.orderedlayout.*;
 import com.vaadin.flow.component.tabs.Tabs;
 import com.vaadin.flow.router.*;
 import com.vaadin.flow.server.VaadinSession;
+import com.vaadin.flow.theme.Theme;
 import jakarta.annotation.security.PermitAll;
 import lombok.Getter;
 import lombok.Setter;
