@@ -14,15 +14,19 @@ public class DashboardService {
         this.repo = repo;
     }
 
-    public List<BoardStatsDto> getStatsForAdmin() {
-        return repo.fetchStatsForAdmin();
+    public List<BoardStatsDto> getActiveForAdmin() {
+        return repo.fetchActiveStatsForAdmin();
     }
 
-    public List<BoardStatsDto> getStatsForOwner(long userId) {
-        return repo.fetchStatsForOwner(userId);
+    public List<BoardStatsDto> getArchivedForAdmin() {
+        return repo.fetchArchivedStatsForAdmin();
     }
 
-    public boolean hasOwnerBoards(long userId) {
-        return repo.hasOwnerBoards(userId);
+    public List<BoardStatsDto> getActiveForOwner(long userId) {
+        return repo.fetchActiveStatsForOwner(userId);
+    }
+
+    public List<BoardStatsDto> getArchivedForOwner(long userId) {
+        return repo.fetchArchivedStatsForOwner(userId);
     }
 }

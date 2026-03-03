@@ -13,7 +13,23 @@ public class DashboardRepository {
     @PersistenceContext
     private EntityManager em;
 
-    public List<BoardStatsDto> fetchStatsForAdmin() {
+    public List<BoardStatsDto> fetchActiveStatsForAdmin() {
+        return fetchStatsForAdmin(false);
+    }
+
+    public List<BoardStatsDto> fetchArchivedStatsForAdmin() {
+        return fetchStatsForAdmin(true);
+    }
+
+    public List<BoardStatsDto> fetchActiveStatsForOwner(long userId) {
+        return fetchStatsForOwner(userId, false);
+    }
+
+    public List<BoardStatsDto> fetchArchivedStatsForOwner(long userId) {
+        return fetchStatsForOwner(userId, true);
+    }
+
+    private List<BoardStatsDto> fetchStatsForAdmin(boolean archived) {
         return em.createQuery("""
             SELECT new carobnifrulas.web_tasks.dashboard.dto.BoardStatsDto(
                 b.id,
@@ -43,11 +59,15 @@ public class DashboardRepository {
             FROM carobnifrulas.web_tasks.board.Board b
             LEFT JOIN carobnifrulas.web_tasks.card.Card c ON c.boardId = b.id
             LEFT JOIN carobnifrulas.web_tasks.list.ListEntity l ON l.id = c.listId
+            WHERE (:archived = true AND b.archivedAt IS NOT NULL)
+               OR (:archived = false AND b.archivedAt IS NULL)
             GROUP BY b.id, b.name
-        """, BoardStatsDto.class).getResultList();
+        """, BoardStatsDto.class)
+                .setParameter("archived", archived)
+                .getResultList();
     }
 
-    public List<BoardStatsDto> fetchStatsForOwner(long userId) {
+    private List<BoardStatsDto> fetchStatsForOwner(long userId, boolean archived) {
         return em.createQuery("""
             SELECT new carobnifrulas.web_tasks.dashboard.dto.BoardStatsDto(
                 b.id,
@@ -79,21 +99,12 @@ public class DashboardRepository {
                 ON bm.id.boardId = b.id AND bm.id.userId = :userId AND bm.role = 'OWNER'
             LEFT JOIN carobnifrulas.web_tasks.card.Card c ON c.boardId = b.id
             LEFT JOIN carobnifrulas.web_tasks.list.ListEntity l ON l.id = c.listId
+            WHERE (:archived = true AND b.archivedAt IS NOT NULL)
+               OR (:archived = false AND b.archivedAt IS NULL)
             GROUP BY b.id, b.name
         """, BoardStatsDto.class)
                 .setParameter("userId", userId)
+                .setParameter("archived", archived)
                 .getResultList();
-    }
-
-    public boolean hasOwnerBoards(long userId) {
-        Long cnt = em.createQuery("""
-            SELECT COUNT(bm)
-            FROM carobnifrulas.web_tasks.board.BoardMember bm
-            WHERE bm.id.userId = :userId AND bm.role = 'OWNER'
-        """, Long.class)
-                .setParameter("userId", userId)
-                .getSingleResult();
-
-        return cnt != null && cnt > 0;
     }
 }

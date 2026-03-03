@@ -8,10 +8,10 @@ import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.html.H2;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.VaadinIcon;
-import com.vaadin.flow.component.orderedlayout.FlexComponent;
-import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
-import com.vaadin.flow.component.orderedlayout.VerticalLayout;
+import com.vaadin.flow.component.orderedlayout.*;
 import com.vaadin.flow.component.progressbar.ProgressBar;
+import com.vaadin.flow.component.tabs.Tab;
+import com.vaadin.flow.component.tabs.Tabs;
 import com.vaadin.flow.dom.DomEventListener;
 import com.vaadin.flow.spring.annotation.UIScope;
 
@@ -21,32 +21,18 @@ public class DashboardView extends View implements MenuTab {
 
     private final DashboardService service;
 
+    private Tabs tabs;
+    private Tab tabActive;
+    private Tab tabArchived;
+    private VerticalLayout content;
+
     public DashboardView(DashboardService service) {
         this.service = service;
     }
 
-    // -------------------------
-    // MenuTab
-    // -------------------------
-
-    @Override
-    public String getTabName() {
-        return "Dashboard";
-    }
-
-    @Override
-    public VaadinIcon getTabIcon() {
-        return VaadinIcon.CHART;
-    }
-
-    @Override
-    public DomEventListener onTabClick() {
-        return e -> MainView.getMainView().setContent(this);
-    }
-
-    // -------------------------
-    // View lifecycle
-    // -------------------------
+    @Override public String getTabName() { return "Dashboard"; }
+    @Override public VaadinIcon getTabIcon() { return VaadinIcon.CHART; }
+    @Override public DomEventListener onTabClick() { return e -> MainView.getMainView().setContent(this); }
 
     @Override
     public void prepare() {
@@ -59,27 +45,44 @@ public class DashboardView extends View implements MenuTab {
         addClassName("dashboard-view");
         removeAll();
 
-        H2 title = new H2("Dashboard");
-        title.addClassName("dashboard-title");
-        add(title);
+        add(new H2("Dashboard"));
 
-        // ✅ OVDJE: admin vidi sve, user vidi samo OWNER boardove
-        var user = MainView.getMainView().getLoggedUser();
-        boolean isAdmin = user != null && "admin@local".equalsIgnoreCase(user.getEmail());
+        tabActive = new Tab("Aktivni");
+        tabArchived = new Tab("Završeni");
 
-        var stats = isAdmin
-                ? service.getStatsForAdmin()
-                : service.getStatsForOwner(user.getId());
+        tabs = new Tabs(tabActive, tabArchived);
+        tabs.setWidthFull();
+
+        content = new VerticalLayout();
+        content.setPadding(false);
+        content.setSpacing(true);
+        content.setWidthFull();
+
+        tabs.addSelectedChangeListener(e -> {
+            boolean archived = e.getSelectedTab() == tabArchived;
+            renderTab(archived);
+        });
+
+        add(tabs, content);
+
+        // default: Aktivni
+        tabs.setSelectedTab(tabActive);
+        renderTab(false);
+    }
+
+    private void renderTab(boolean archived) {
+        content.removeAll();
+
+        var stats = loadForTab(archived);
 
         if (stats.isEmpty()) {
-            Span empty = new Span(isAdmin
-                    ? "No boards available."
-                    : "You don't have any boards where you are OWNER.");
-            empty.addClassName("dashboard-empty");
-            add(empty);
+            content.add(new Span(archived
+                    ? "Nema gotovih dashboardova."
+                    : "Nema aktivnih dashboardova."));
             return;
         }
 
+        // responsive “grid”
         HorizontalLayout grid = new HorizontalLayout();
         grid.addClassName("dashboard-grid");
         grid.setWidthFull();
@@ -90,8 +93,21 @@ public class DashboardView extends View implements MenuTab {
             grid.add(buildBoardCard(dto));
         }
 
-        add(grid);
+        content.add(grid);
     }
+
+    private java.util.List<BoardStatsDto> loadForTab(boolean archived) {
+        var user = MainView.getMainView().getLoggedUser();
+        boolean isAdmin = user != null && "admin@local".equalsIgnoreCase(user.getEmail());
+
+        if (isAdmin) {
+            return archived ? service.getArchivedForAdmin() : service.getActiveForAdmin();
+        }
+        // owner-only stats
+        return archived ? service.getArchivedForOwner(user.getId()) : service.getActiveForOwner(user.getId());
+    }
+
+    // ------- isti UI kao kod tebe -------
 
     private Component buildBoardCard(BoardStatsDto dto) {
 
@@ -112,7 +128,8 @@ public class DashboardView extends View implements MenuTab {
         overdueBadge.addClassName("badge");
         overdueBadge.addClassName(dto.getOverdueTasks() > 0 ? "badge-danger" : "badge-ok");
 
-        header.add(boardName, overdueBadge);
+        header.add(boardName);
+        header.add(overdueBadge);
         header.expand(boardName);
 
         double progress = dto.getProgressPercent();
