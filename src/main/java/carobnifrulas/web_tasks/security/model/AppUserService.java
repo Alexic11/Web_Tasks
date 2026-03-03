@@ -33,7 +33,6 @@ public class AppUserService {
         return users.existsByEmailIgnoreCase(email);
     }
 
-    /** Kreira user-a i vrati mu privremenu lozinku (plain) da admin može copy/paste. */
     @Transactional
     public CreatedUserResult createUserWithTempPassword(String email, String fullName) {
         if (existsByEmail(email)) {
@@ -53,7 +52,6 @@ public class AppUserService {
         return new CreatedUserResult(u, tempPassword);
     }
 
-    /** Admin reset lozinke: postavi novu temp i force change. */
     @Transactional
     public String resetPassword(Long userId) {
         User u = users.findById(userId).orElseThrow();
@@ -64,13 +62,29 @@ public class AppUserService {
         return tempPassword;
     }
 
-    /** User promjena lozinke (npr. ChangePasswordView). */
     @Transactional
     public void changePassword(Long userId, String newPassword) {
         User u = users.findById(userId).orElseThrow();
         u.setPasswordHash(encoder.encode(newPassword));
         u.setMustChangePassword(false);
         users.save(u);
+    }
+
+    // ✅ NOVO: brisanje usera
+    @Transactional
+    public void deleteUser(Long userId) {
+        User u = users.findById(userId)
+                .orElseThrow(() -> new IllegalStateException("User not found."));
+
+        // blokiraj brisanje admin naloga
+        if (u.getEmail() != null && "admin@local".equalsIgnoreCase(u.getEmail())) {
+            throw new IllegalStateException("Ne možeš obrisati admin nalog.");
+        }
+
+        // NOTE:
+        // Ako imaš FK veze (board_members, cards, itd), ovdje može puknuti constraint.
+        // Tada ćemo dodati cleanup (brisanje board_members redova) ili soft delete.
+        users.delete(u);
     }
 
     private static final String ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#";
@@ -86,9 +100,7 @@ public class AppUserService {
 
     public record CreatedUserResult(User user, String tempPassword) {}
 
-
     public java.util.Optional<User> findById(Long userId) {
         return users.findById(userId);
     }
-
 }

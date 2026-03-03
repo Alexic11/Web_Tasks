@@ -19,7 +19,7 @@ public class SecurityConfiguration {
             config.loginView(LoginView.class);
         });
 
-        // ✅ Spring Security logout endpoint + redirect poslije logout-a
+        // Spring Security logout endpoint + redirect poslije logout-a
         http.logout(logout -> logout
                 .logoutUrl("/logout")
                 .logoutSuccessUrl("/login")

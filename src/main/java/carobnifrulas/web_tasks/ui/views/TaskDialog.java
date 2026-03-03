@@ -269,7 +269,7 @@ public class TaskDialog extends Dialog {
         title.getStyle().set("margin", "0");
 
         MessageList list = new MessageList();
-        list.setWidthFull();
+        list.setWidth("95%");
 
         // scroll + border unutar card-a
         list.getStyle()

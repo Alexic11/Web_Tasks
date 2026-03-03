@@ -195,14 +195,14 @@ public class BoardView extends View {
         columns.setWidthFull();
         columns.setSpacing(true);
 
-        // ✅ span za count koji ćemo update-ovati bez rebuild-a view-a
+        // span za count koji ćemo update-ovati bez rebuild-a view-a
         Span count = new Span();
         count.getStyle()
                 .set("font-size", "var(--lumo-font-size-s)")
                 .set("color", "var(--lumo-secondary-text-color)")
                 .set("margin-left", "auto");
 
-        // ✅ refresh kolona (i count-a) bez MainView.setContent(...)
+        // refresh kolona (i count-a) bez MainView.setContent(...)
         Runnable refreshColumns = () -> {
             try {
                 columns.removeAll();
@@ -273,7 +273,7 @@ public class BoardView extends View {
         header.add(h, addTask);
         col.add(header);
 
-        // ✅ Drop na samu listu => ide na kraj liste (samo ako može pisati)
+        // Drop na samu listu => ide na kraj liste (samo ako može pisati)
         if (canWrite) {
             DropTarget<VerticalLayout> dropOnList = DropTarget.create(col);
             dropOnList.setDropEffect(DropEffect.MOVE);
@@ -475,14 +475,14 @@ public class BoardView extends View {
         return due;
     }
 
-    // ✅ UPDATED: priority label "Svi" kad je null + search refresh bez rebuild-a view-a
+    // ✅ FIX: reset mora vratiti i UI kontrole na default (ne samo filterState)
     private Component buildFilterBar(Map<Long, String> assigneeLabel, Span count, Runnable refreshColumns) {
         HorizontalLayout bar = new HorizontalLayout();
         bar.setWidthFull();
         bar.setDefaultVerticalComponentAlignment(FlexComponent.Alignment.END);
         bar.setSpacing(true);
 
-        // --- Assignee filter (NE DIRAMO LOGIKU "Svi") ---
+        // --- Assignee filter ---
         Select<Long> assignee = new Select<>();
         assignee.setLabel("Assignee");
         assignee.setWidth("320px");
@@ -504,25 +504,22 @@ public class BoardView extends View {
 
         assignee.addValueChangeListener(e -> {
             filterState.assigneeId = e.getValue();
-            refreshColumns.run(); // ✅ bez gubljenja fokusa
+            refreshColumns.run();
         });
 
-        // --- Priority filter (fix Pnull) ---
+        // --- Priority filter ---
         Select<Integer> pr = new Select<>();
         pr.setLabel("Prioritet");
         pr.setWidth("200px");
         pr.setEmptySelectionAllowed(true);
         pr.setEmptySelectionCaption("Svi");
         pr.setItems(1, 2, 3, 4, 5);
-
-        // ✅ kad je null, label je "Svi" (da ne bude "Pnull")
         pr.setItemLabelGenerator(p -> p == null ? "Svi" : "P" + p);
-
         pr.setValue(filterState.priority);
 
         pr.addValueChangeListener(e -> {
             filterState.priority = e.getValue();
-            refreshColumns.run(); // ✅ bez rebuild-a view-a
+            refreshColumns.run();
         });
 
         // --- Overdue only ---
@@ -533,7 +530,7 @@ public class BoardView extends View {
             refreshColumns.run();
         });
 
-        // --- Search title (live debounce, ali bez izbacivanja iz inputa) ---
+        // --- Search title ---
         TextField search = new TextField();
         search.setLabel("Search title");
         search.setWidthFull();
@@ -545,15 +542,24 @@ public class BoardView extends View {
 
         search.addValueChangeListener(e -> {
             filterState.titleQuery = e.getValue();
-            refreshColumns.run(); // ✅ ostaje fokus u search-u
+            refreshColumns.run();
         });
 
-        // --- Reset button ---
+        // --- Reset button (state + UI) ---
         Button reset = new Button("Reset", e -> {
+            // 1) reset state
             filterState.assigneeId = null;
             filterState.priority = null;
             filterState.overdueOnly = false;
             filterState.titleQuery = "";
+
+            // 2) reset UI controls (ovo ti je falilo)
+            assignee.clear();          // vrati na "Svi"
+            pr.clear();                // vrati na "Svi"
+            overdue.setValue(false);   // odčekiraj
+            search.clear();            // isprazni
+
+            // 3) refresh
             refreshColumns.run();
         });
 
@@ -590,7 +596,7 @@ public class BoardView extends View {
             if (c.getDueAt() == null) return false;
             if (!c.getDueAt().isBefore(LocalDateTime.now())) return false;
 
-            // opcionalno: sakrij overdue u zadnjoj listi (Done)
+            // sakrij overdue u zadnjoj listi (Done)
             if (listIdx == totalLists - 1) return false;
         }
 

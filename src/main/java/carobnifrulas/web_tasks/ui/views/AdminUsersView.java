@@ -4,7 +4,7 @@ import carobnifrulas.web_tasks.ui.MainView;
 import carobnifrulas.web_tasks.ui.menu.MenuTab;
 import carobnifrulas.web_tasks.user.User;
 import com.vaadin.flow.component.button.Button;
-import com.vaadin.flow.component.checkbox.Checkbox;
+import com.vaadin.flow.component.confirmdialog.ConfirmDialog;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.html.H2;
@@ -31,17 +31,17 @@ public class AdminUsersView extends View implements MenuTab {
 
     private final Grid<User> grid = new Grid<>(User.class, false);
 
-    // ✅ cache za filtering
+    // cache za filtering
     private List<User> allUsers = List.of();
 
-    // ✅ state
+    // state
     private final FilterState filterState = new FilterState();
 
     private static final class FilterState {
-        String idQuery;       // pretraga po ID
-        String emailQuery;    // pretraga po email
-        String nameQuery;     // pretraga po imenu
-        String mustChange;    // null = svi, "DA", "NE"
+        String idQuery;
+        String emailQuery;
+        String nameQuery;
+        String mustChange; // null = svi, "DA", "NE"
 
         void reset() {
             idQuery = "";
@@ -127,30 +127,27 @@ public class AdminUsersView extends View implements MenuTab {
             String idq = filterState.idQuery == null ? "" : filterState.idQuery.trim();
             String eq = filterState.emailQuery == null ? "" : filterState.emailQuery.trim().toLowerCase();
             String nq = filterState.nameQuery == null ? "" : filterState.nameQuery.trim().toLowerCase();
-            String mustVal = filterState.mustChange; // null/DA/NE
+            String mustVal = filterState.mustChange;
 
             List<User> filtered = new ArrayList<>();
 
             for (User u : allUsers) {
-                // ID search (substring na string)
+
                 if (!idq.isEmpty()) {
                     String idStr = u.getId() == null ? "" : String.valueOf(u.getId());
                     if (!idStr.contains(idq)) continue;
                 }
 
-                // email search
                 if (!eq.isEmpty()) {
                     String em = u.getEmail() == null ? "" : u.getEmail().toLowerCase();
                     if (!em.contains(eq)) continue;
                 }
 
-                // name search
                 if (!nq.isEmpty()) {
                     String fn = u.getFullName() == null ? "" : u.getFullName().toLowerCase();
                     if (!fn.contains(nq)) continue;
                 }
 
-                // must change filter
                 if (mustVal != null) {
                     boolean m = u.isMustChangePassword();
                     if ("DA".equals(mustVal) && !m) continue;
@@ -164,7 +161,6 @@ public class AdminUsersView extends View implements MenuTab {
             count.setText("Prikaz: " + filtered.size() + " / " + allUsers.size());
         };
 
-        // listeners (live)
         idSearch.addValueChangeListener(e -> {
             filterState.idQuery = e.getValue();
             applyFilters.run();
@@ -194,31 +190,78 @@ public class AdminUsersView extends View implements MenuTab {
             applyFilters.run();
         });
 
-        // inicijalno
         applyFilters.run();
 
         add(addUser, bar, grid);
     }
 
     private void configureGrid() {
+
+        grid.removeAllColumns(); // spriječi dupliranje kolona kad se view refresha
         grid.setWidthFull();
 
         grid.addColumn(User::getId).setHeader("ID").setAutoWidth(true);
-        grid.addColumn(User::getEmail).setHeader("Email").setAutoWidth(true).setFlexGrow(1);
-        grid.addColumn(User::getFullName).setHeader("Ime").setAutoWidth(true).setFlexGrow(1);
+
+        grid.addColumn(User::getEmail)
+                .setHeader("Email")
+                .setAutoWidth(true)
+                .setFlexGrow(1);
+
+        grid.addColumn(User::getFullName)
+                .setHeader("Ime")
+                .setAutoWidth(true)
+                .setFlexGrow(1);
+
         grid.addColumn(u -> u.isMustChangePassword() ? "DA" : "NE")
-                .setHeader("Mora promj. lozinku").setAutoWidth(true);
+                .setHeader("Mora promj. lozinku")
+                .setAutoWidth(true);
 
         grid.addComponentColumn(u -> {
             Button reset = new Button("Reset PW", e -> openResetDialog(u));
             reset.setIcon(VaadinIcon.REFRESH.create());
             return reset;
-        }).setHeader("Akcija").setAutoWidth(true);
+        }).setHeader("Reset").setAutoWidth(true);
+
+        // ✅ NOVO: Delete kolona
+        grid.addComponentColumn(u -> {
+            Button del = new Button("Obriši");
+            del.setIcon(VaadinIcon.TRASH.create());
+            del.getStyle().set("color", "crimson");
+
+            if (u.getEmail() != null && "admin@local".equalsIgnoreCase(u.getEmail())) {
+                del.setEnabled(false);
+                del.setTooltipText("Ne možeš obrisati admin nalog.");
+            }
+
+            del.addClickListener(e -> {
+                ConfirmDialog cd = new ConfirmDialog();
+                cd.setHeader("Potvrda brisanja");
+                cd.setText("Da li ste sigurni da želite obrisati korisnika: " + u.getEmail() + " ?");
+                cd.setCancelable(true);
+                cd.setCancelText("Otkaži");
+                cd.setConfirmText("Obriši");
+                cd.setConfirmButtonTheme("error primary");
+
+                cd.addConfirmListener(ev -> {
+                    try {
+                        services.userService.deleteUser(u.getId());
+                        refreshAllUsers();
+                        MainView.getMainView().setContent(this);
+                        Notification.show("Korisnik obrisan.");
+                    } catch (Exception ex) {
+                        Notification.show(ex.getMessage());
+                    }
+                });
+
+                cd.open();
+            });
+
+            return del;
+        }).setHeader("Brisanje").setAutoWidth(true);
 
         grid.setAllRowsVisible(true);
     }
 
-    // ✅ učitaj jednom za filtere
     private void refreshAllUsers() {
         allUsers = services.userService.findAllUsers();
         if (allUsers == null) allUsers = List.of();
@@ -250,14 +293,7 @@ public class AdminUsersView extends View implements MenuTab {
                 var res = services.userService.createUserWithTempPassword(em, fn);
                 d.close();
 
-                // refresh cache + grid
                 refreshAllUsers();
-
-                // reset filtera nije obavezan, ali često je bolje da odmah vidiš novog usera:
-                // filterState.reset();
-                // (ostavljam filtere kakvi jesu)
-
-                // samo re-render bez filtera? -> najjednostavnije: ponovo otvori view:
                 MainView.getMainView().setContent(this);
 
                 showTempPasswordDialog(res.user().getEmail(), res.tempPassword());
@@ -315,7 +351,6 @@ public class AdminUsersView extends View implements MenuTab {
         d.open();
     }
 
-    // MenuTab
     @Override public String getTabName() { return "Admin"; }
     @Override public VaadinIcon getTabIcon() { return VaadinIcon.TOOLS; }
     @Override public DomEventListener onTabClick() { return e -> MainView.getMainView().setContent(this); }
