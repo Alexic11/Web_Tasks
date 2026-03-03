@@ -5,35 +5,116 @@ import carobnifrulas.web_tasks.board.BoardRole;
 import carobnifrulas.web_tasks.ui.MainView;
 import carobnifrulas.web_tasks.ui.menu.MenuTab;
 import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.component.confirmdialog.ConfirmDialog;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.grid.Grid;
+import com.vaadin.flow.component.html.H2;
+import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.notification.Notification;
-import com.vaadin.flow.component.orderedlayout.*;
+import com.vaadin.flow.component.orderedlayout.FlexComponent;
+import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
+import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.TextField;
+import com.vaadin.flow.data.value.ValueChangeMode;
 import com.vaadin.flow.dom.DomEventListener;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.List;
-import com.vaadin.flow.component.confirmdialog.ConfirmDialog;
-
 
 @Component
 public class BoardsView extends View implements MenuTab {
 
     private final Grid<Board> grid = new Grid<>(Board.class, false);
 
+    // ✅ cache za live search
+    private List<Board> allBoards = List.of();
+
+    // ✅ state
+    private final FilterState filterState = new FilterState();
+
+    private static final class FilterState {
+        String nameQuery;
+
+        void reset() {
+            nameQuery = "";
+        }
+    }
+
     @Override
     public void setElements() {
-        add(new com.vaadin.flow.component.html.H2("Boards"));
+        add(new H2("Boards"));
 
         Button create = new Button("Novi board", e -> openCreateDialog());
         create.setIcon(VaadinIcon.PLUS.create());
 
         configureGrid();
-        refresh();
 
-        add(create, grid);
+        // ===== FILTER BAR =====
+        HorizontalLayout bar = new HorizontalLayout();
+        bar.setWidthFull();
+        bar.setDefaultVerticalComponentAlignment(FlexComponent.Alignment.END);
+        bar.setSpacing(true);
+
+        TextField nameSearch = new TextField();
+        nameSearch.setLabel("Search naziv");
+        nameSearch.setWidth("360px");
+        nameSearch.setClearButtonVisible(true);
+        nameSearch.setValue(filterState.nameQuery == null ? "" : filterState.nameQuery);
+        nameSearch.setValueChangeMode(ValueChangeMode.TIMEOUT);
+        nameSearch.setValueChangeTimeout(300);
+
+        Button reset = new Button("Reset");
+
+        Span count = new Span();
+        count.getStyle()
+                .set("font-size", "var(--lumo-font-size-s)")
+                .set("color", "var(--lumo-secondary-text-color)")
+                .set("margin-left", "auto");
+
+        bar.add(nameSearch, reset, count);
+
+        bar.getStyle()
+                .set("border", "1px solid var(--lumo-contrast-10pct)")
+                .set("border-radius", "12px")
+                .set("padding", "10px")
+                .set("margin-top", "8px");
+
+        // ===== LOAD + APPLY FILTERS =====
+        refreshAll();
+
+        Runnable applyFilters = () -> {
+            String nq = filterState.nameQuery == null ? "" : filterState.nameQuery.trim().toLowerCase();
+
+            List<Board> filtered = new ArrayList<>();
+            for (Board b : allBoards) {
+                if (!nq.isEmpty()) {
+                    String name = b.getName() == null ? "" : b.getName().toLowerCase();
+                    if (!name.contains(nq)) continue;
+                }
+                filtered.add(b);
+            }
+
+            grid.setItems(filtered);
+            count.setText("Prikaz: " + filtered.size() + " / " + allBoards.size());
+        };
+
+        nameSearch.addValueChangeListener(e -> {
+            filterState.nameQuery = e.getValue();
+            applyFilters.run();
+        });
+
+        reset.addClickListener(e -> {
+            filterState.reset();
+            nameSearch.setValue("");
+            applyFilters.run();
+        });
+
+        // inicijalno
+        applyFilters.run();
+
+        add(create, bar, grid);
     }
 
     private void configureGrid() {
@@ -58,13 +139,11 @@ public class BoardsView extends View implements MenuTab {
         }).setHeader("Akcija").setAutoWidth(true);
 
         // =========================
-        // ✅ ZATVORI (sa confirm dialogom)  [2A]
+        // ✅ ZATVORI (sa confirm dialogom)
         // =========================
-
         grid.addComponentColumn(b -> {
             Button close = new Button("Zatvori", VaadinIcon.LOCK.create());
 
-            // vidljivost: global admin ili OWNER/ADMIN na boardu
             boolean isGlobalAdmin = carobnifrulas.web_tasks.security.model.SecurityUtils.isGlobalAdmin(loggedUser);
             if (isGlobalAdmin) {
                 close.setVisible(true);
@@ -86,7 +165,6 @@ public class BoardsView extends View implements MenuTab {
                     return;
                 }
 
-                // ✅ Ako ima otvorenih taskova -> samo info dialog
                 if (openCnt > 0) {
                     ConfirmDialog info = new ConfirmDialog();
                     info.setHeader("Ne možeš zatvoriti board");
@@ -99,7 +177,6 @@ public class BoardsView extends View implements MenuTab {
                     return;
                 }
 
-                // ✅ Ako nema otvorenih taskova -> standard confirm
                 ConfirmDialog cd = new ConfirmDialog();
                 cd.setHeader("Zatvori board?");
                 cd.setText("Jesi li siguran da želiš zatvoriti board '" + b.getName() + "' ? Board će preći u History.");
@@ -112,7 +189,10 @@ public class BoardsView extends View implements MenuTab {
                     try {
                         services.boardService.archiveBoard(b.getId(), loggedUser.getId());
                         Notification.show("Board '" + b.getName() + "' je zatvoren.");
-                        refresh();
+
+                        // refresh cache + ostani u istom view-u (najjednostavnije)
+                        refreshAll();
+                        MainView.getMainView().setContent(this);
                     } catch (Exception ex) {
                         Notification.show(ex.getMessage());
                     }
@@ -120,8 +200,6 @@ public class BoardsView extends View implements MenuTab {
 
                 cd.open();
             });
-
-
 
             return close;
         }).setHeader("Zatvori").setAutoWidth(true);
@@ -136,10 +214,10 @@ public class BoardsView extends View implements MenuTab {
         grid.setAllRowsVisible(true);
     }
 
-
-    private void refresh() {
+    // ✅ učitaj jednom (za filtering)
+    private void refreshAll() {
         List<Board> boards = services.boardService.listBoardsFor(loggedUser);
-        grid.setItems(boards);
+        allBoards = (boards == null) ? List.of() : boards;
     }
 
     private void openCreateDialog() {
@@ -155,9 +233,17 @@ public class BoardsView extends View implements MenuTab {
                 Notification.show("Unesi naziv boarda.");
                 return;
             }
-            services.boardService.createBoard(name.getValue().trim(), loggedUser.getId());
-            d.close();
-            refresh();
+
+            try {
+                services.boardService.createBoard(name.getValue().trim(), loggedUser.getId());
+                d.close();
+
+                // refresh cache + reload view (da filter bar/count bude tačan odmah)
+                refreshAll();
+                MainView.getMainView().setContent(this);
+            } catch (Exception ex) {
+                Notification.show(ex.getMessage());
+            }
         });
 
         Button cancel = new Button("Otkaži", e -> d.close());

@@ -7,6 +7,7 @@ import carobnifrulas.web_tasks.list.ListEntity;
 import carobnifrulas.web_tasks.ui.MainView;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.component.checkbox.Checkbox;
 import com.vaadin.flow.component.confirmdialog.ConfirmDialog;
 import com.vaadin.flow.component.dnd.DragSource;
 import com.vaadin.flow.component.dnd.DropEffect;
@@ -19,11 +20,13 @@ import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.orderedlayout.*;
+import com.vaadin.flow.component.select.Select;
+import com.vaadin.flow.component.textfield.TextField;
+import com.vaadin.flow.data.value.ValueChangeMode;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
@@ -32,11 +35,34 @@ public class BoardView extends View {
     private final Long boardId;
     private final AtomicLong draggedCardId = new AtomicLong(-1L);
 
+    private final FilterState filterState;
+
+    private static final class FilterState {
+        Long assigneeId;     // null = svi, -1 = unassigned, >0 = konkretan user
+        Integer priority;    // null = svi
+        boolean overdueOnly;
+        String titleQuery;   // null/"" = sve
+
+        FilterState copy() {
+            FilterState c = new FilterState();
+            c.assigneeId = this.assigneeId;
+            c.priority = this.priority;
+            c.overdueOnly = this.overdueOnly;
+            c.titleQuery = this.titleQuery;
+            return c;
+        }
+    }
+
     private static final DateTimeFormatter DT_FMT =
             DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
 
     public BoardView(Long boardId) {
+        this(boardId, new FilterState());
+    }
+
+    private BoardView(Long boardId, FilterState state) {
         this.boardId = boardId;
+        this.filterState = state == null ? new FilterState() : state;
     }
 
     @Override
@@ -115,7 +141,6 @@ public class BoardView extends View {
                 return;
             }
 
-            // ✅ Ako ima otvorenih taskova -> samo info dialog
             if (openCnt > 0) {
                 ConfirmDialog info = new ConfirmDialog();
                 info.setHeader("Ne možeš zatvoriti board");
@@ -128,7 +153,6 @@ public class BoardView extends View {
                 return;
             }
 
-            // ✅ Ako nema otvorenih taskova -> standard confirm
             ConfirmDialog cd = new ConfirmDialog();
             cd.setHeader("Zatvori board?");
             cd.setText("Jesi li siguran da želiš zatvoriti board '" + board.getName() + "' ? Board će preći u History.");
@@ -150,9 +174,7 @@ public class BoardView extends View {
             cd.open();
         });
 
-
         closeBoard.setVisible(canArchive);
-
 
         right.add(roleBadge, membersBtn, closeBoard);
         top.add(left, right);
@@ -168,17 +190,57 @@ public class BoardView extends View {
             add(p);
         }
 
-        // ===== COLUMNS =====
-        List<ListEntity> lists = services.listService.findByBoard(boardId);
-
+        // ===== COLUMNS UI =====
         HorizontalLayout columns = new HorizontalLayout();
         columns.setWidthFull();
         columns.setSpacing(true);
 
-        for (int i = 0; i < lists.size(); i++) {
-            ListEntity list = lists.get(i);
-            columns.add(buildColumn(list, lists, i, canWrite, assigneeLabel));
-        }
+        // ✅ span za count koji ćemo update-ovati bez rebuild-a view-a
+        Span count = new Span();
+        count.getStyle()
+                .set("font-size", "var(--lumo-font-size-s)")
+                .set("color", "var(--lumo-secondary-text-color)")
+                .set("margin-left", "auto");
+
+        // ✅ refresh kolona (i count-a) bez MainView.setContent(...)
+        Runnable refreshColumns = () -> {
+            try {
+                columns.removeAll();
+
+                List<ListEntity> lists = services.listService.findByBoard(boardId);
+
+                Map<Long, List<Card>> cardsByList = new LinkedHashMap<>();
+                for (ListEntity l : lists) {
+                    cardsByList.put(l.getId(), services.cardService.findByList(l.getId()));
+                }
+
+                int totalCount = cardsByList.values().stream().mapToInt(List::size).sum();
+
+                int matchCount = 0;
+                for (int i = 0; i < lists.size(); i++) {
+                    Long listId = lists.get(i).getId();
+                    for (Card c : cardsByList.getOrDefault(listId, List.of())) {
+                        if (matchesFilters(c, i, lists.size())) matchCount++;
+                    }
+                }
+
+                count.setText("Prikaz: " + matchCount + " / " + totalCount);
+
+                for (int i = 0; i < lists.size(); i++) {
+                    ListEntity list = lists.get(i);
+                    columns.add(buildColumn(list, lists, i, canWrite, assigneeLabel, cardsByList));
+                }
+            } catch (Exception ex) {
+                Notification.show(ex.getMessage());
+            }
+        };
+
+        // ===== FILTER BAR =====
+        Component filterBar = buildFilterBar(assigneeLabel, count, refreshColumns);
+        add(filterBar);
+
+        // inicijalno punjenje
+        refreshColumns.run();
 
         add(columns);
     }
@@ -187,7 +249,8 @@ public class BoardView extends View {
                                   List<ListEntity> allLists,
                                   int idx,
                                   boolean canWrite,
-                                  Map<Long, String> assigneeLabel) {
+                                  Map<Long, String> assigneeLabel,
+                                  Map<Long, List<Card>> cardsByList) {
 
         VerticalLayout col = new VerticalLayout();
         col.setPadding(true);
@@ -221,15 +284,16 @@ public class BoardView extends View {
                 try {
                     int endIndex = services.cardService.findByList(list.getId()).size();
                     services.cardService.reorderWithinList(movingId, list.getId(), endIndex, loggedUser.getId());
-                    MainView.getMainView().setContent(new BoardView(boardId));
+                    MainView.getMainView().setContent(new BoardView(boardId, filterState.copy()));
                 } catch (Exception ex) {
                     Notification.show(ex.getMessage());
                 }
             });
         }
 
-        List<Card> cards = services.cardService.findByList(list.getId());
+        List<Card> cards = cardsByList.getOrDefault(list.getId(), List.of());
         for (Card c : cards) {
+            if (!matchesFilters(c, idx, allLists.size())) continue;
             col.add(renderCard(c, list.getId(), allLists, idx, canWrite, assigneeLabel));
         }
 
@@ -251,7 +315,6 @@ public class BoardView extends View {
                 .set("border", "1px solid var(--lumo-contrast-20pct)")
                 .set("border-radius", "12px");
 
-        // ✅ Drag & Drop samo ako može pisati
         if (canWrite) {
             DragSource<Component> drag = DragSource.create(box);
             drag.setDragData(c.getId());
@@ -277,14 +340,13 @@ public class BoardView extends View {
                     }
 
                     services.cardService.reorderWithinList(movingId, columnListId, targetIdx, loggedUser.getId());
-                    MainView.getMainView().setContent(new BoardView(boardId));
+                    MainView.getMainView().setContent(new BoardView(boardId, filterState.copy()));
                 } catch (Exception ex) {
                     Notification.show(ex.getMessage());
                 }
             });
         }
 
-        // klik -> edit dialog (i u archived režimu dozvoljeno, ali TaskDialog će ti ionako biti readOnly ako tako radiš)
         box.addClickListener(ev -> TaskDialog.edit(services, c, loggedUser.getId()).open());
 
         Span title = new Span(c.getTitle());
@@ -312,12 +374,12 @@ public class BoardView extends View {
 
         Button take = new Button("Preuzmi", e -> {
             services.cardService.assignToMe(c.getId(), loggedUser.getId());
-            MainView.getMainView().setContent(new BoardView(boardId));
+            MainView.getMainView().setContent(new BoardView(boardId, filterState.copy()));
         });
 
         Button release = new Button("Pusti", e -> {
             services.cardService.unassign(c.getId(), loggedUser.getId());
-            MainView.getMainView().setContent(new BoardView(boardId));
+            MainView.getMainView().setContent(new BoardView(boardId, filterState.copy()));
         });
 
         boolean iAmAssignee = c.getAssignedTo() != null && c.getAssignedTo().equals(loggedUser.getId());
@@ -333,7 +395,7 @@ public class BoardView extends View {
                         allLists.get(idx - 1).getId(),
                         loggedUser.getId()
                 );
-                MainView.getMainView().setContent(new BoardView(boardId));
+                MainView.getMainView().setContent(new BoardView(boardId, filterState.copy()));
             } catch (Exception ex) {
                 Notification.show(ex.getMessage());
             }
@@ -348,12 +410,11 @@ public class BoardView extends View {
                         allLists.get(idx + 1).getId(),
                         loggedUser.getId()
                 );
-                MainView.getMainView().setContent(new BoardView(boardId));
+                MainView.getMainView().setContent(new BoardView(boardId, filterState.copy()));
             } catch (Exception ex) {
                 Notification.show(ex.getMessage());
             }
         });
-
 
         left.setEnabled(idx > 0);
         right.setEnabled(idx < allLists.size() - 1);
@@ -412,5 +473,134 @@ public class BoardView extends View {
         }
 
         return due;
+    }
+
+    // ✅ UPDATED: priority label "Svi" kad je null + search refresh bez rebuild-a view-a
+    private Component buildFilterBar(Map<Long, String> assigneeLabel, Span count, Runnable refreshColumns) {
+        HorizontalLayout bar = new HorizontalLayout();
+        bar.setWidthFull();
+        bar.setDefaultVerticalComponentAlignment(FlexComponent.Alignment.END);
+        bar.setSpacing(true);
+
+        // --- Assignee filter (NE DIRAMO LOGIKU "Svi") ---
+        Select<Long> assignee = new Select<>();
+        assignee.setLabel("Assignee");
+        assignee.setWidth("320px");
+        assignee.setEmptySelectionAllowed(true);
+        assignee.setEmptySelectionCaption("Svi");
+
+        List<Long> assItems = new ArrayList<>();
+        assItems.add(-1L); // unassigned
+        assItems.addAll(assigneeLabel.keySet());
+        assignee.setItems(assItems);
+
+        assignee.setItemLabelGenerator(id -> {
+            if (id == null) return "Svi";
+            if (id == -1L) return "— Unassigned —";
+            return assigneeLabel.getOrDefault(id, String.valueOf(id));
+        });
+
+        assignee.setValue(filterState.assigneeId);
+
+        assignee.addValueChangeListener(e -> {
+            filterState.assigneeId = e.getValue();
+            refreshColumns.run(); // ✅ bez gubljenja fokusa
+        });
+
+        // --- Priority filter (fix Pnull) ---
+        Select<Integer> pr = new Select<>();
+        pr.setLabel("Prioritet");
+        pr.setWidth("200px");
+        pr.setEmptySelectionAllowed(true);
+        pr.setEmptySelectionCaption("Svi");
+        pr.setItems(1, 2, 3, 4, 5);
+
+        // ✅ kad je null, label je "Svi" (da ne bude "Pnull")
+        pr.setItemLabelGenerator(p -> p == null ? "Svi" : "P" + p);
+
+        pr.setValue(filterState.priority);
+
+        pr.addValueChangeListener(e -> {
+            filterState.priority = e.getValue();
+            refreshColumns.run(); // ✅ bez rebuild-a view-a
+        });
+
+        // --- Overdue only ---
+        Checkbox overdue = new Checkbox("Overdue");
+        overdue.setValue(filterState.overdueOnly);
+        overdue.addValueChangeListener(e -> {
+            filterState.overdueOnly = Boolean.TRUE.equals(e.getValue());
+            refreshColumns.run();
+        });
+
+        // --- Search title (live debounce, ali bez izbacivanja iz inputa) ---
+        TextField search = new TextField();
+        search.setLabel("Search title");
+        search.setWidthFull();
+        search.setClearButtonVisible(true);
+        search.setValue(filterState.titleQuery == null ? "" : filterState.titleQuery);
+
+        search.setValueChangeMode(ValueChangeMode.TIMEOUT);
+        search.setValueChangeTimeout(300);
+
+        search.addValueChangeListener(e -> {
+            filterState.titleQuery = e.getValue();
+            refreshColumns.run(); // ✅ ostaje fokus u search-u
+        });
+
+        // --- Reset button ---
+        Button reset = new Button("Reset", e -> {
+            filterState.assigneeId = null;
+            filterState.priority = null;
+            filterState.overdueOnly = false;
+            filterState.titleQuery = "";
+            refreshColumns.run();
+        });
+
+        bar.add(assignee, pr, overdue, search, reset, count);
+        bar.setFlexGrow(1, search);
+
+        bar.getStyle()
+                .set("border", "1px solid var(--lumo-contrast-10pct)")
+                .set("border-radius", "12px")
+                .set("padding", "10px")
+                .set("margin-top", "8px");
+
+        return bar;
+    }
+
+    private boolean matchesFilters(Card c, int listIdx, int totalLists) {
+        // assignee
+        if (filterState.assigneeId != null) {
+            if (filterState.assigneeId == -1L) {
+                if (c.getAssignedTo() != null) return false;
+            } else {
+                if (c.getAssignedTo() == null || !filterState.assigneeId.equals(c.getAssignedTo())) return false;
+            }
+        }
+
+        // priority
+        if (filterState.priority != null) {
+            int p = c.getPriority() == null ? 1 : c.getPriority();
+            if (!filterState.priority.equals(p)) return false;
+        }
+
+        // overdue
+        if (filterState.overdueOnly) {
+            if (c.getDueAt() == null) return false;
+            if (!c.getDueAt().isBefore(LocalDateTime.now())) return false;
+
+            // opcionalno: sakrij overdue u zadnjoj listi (Done)
+            if (listIdx == totalLists - 1) return false;
+        }
+
+        // search by title
+        String q = filterState.titleQuery == null ? "" : filterState.titleQuery.trim();
+        if (!q.isEmpty()) {
+            String t = c.getTitle() == null ? "" : c.getTitle();
+            if (!t.toLowerCase().contains(q.toLowerCase())) return false;
+        }
+
+        return true;
     }
 }
