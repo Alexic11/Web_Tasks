@@ -5,6 +5,7 @@ import carobnifrulas.web_tasks.board.BoardRole;
 import carobnifrulas.web_tasks.ui.MainView;
 import carobnifrulas.web_tasks.ui.menu.MenuTab;
 import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.confirmdialog.ConfirmDialog;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.html.H2;
@@ -75,6 +76,8 @@ public class ArchivedBoardsView extends View implements MenuTab {
         archivedSearch.setValueChangeTimeout(300);
 
         Button reset = new Button("Reset");
+        reset.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
 
         Span count = new Span();
         count.getStyle()
@@ -162,6 +165,8 @@ public class ArchivedBoardsView extends View implements MenuTab {
         // ✅ REOPEN (samo global admin ili OWNER)
         grid.addComponentColumn(b -> {
             Button reopen = new Button("Reopen", VaadinIcon.UNLOCK.create());
+            reopen.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
 
             boolean isGlobalAdmin = carobnifrulas.web_tasks.security.model.SecurityUtils.isGlobalAdmin(loggedUser);
 

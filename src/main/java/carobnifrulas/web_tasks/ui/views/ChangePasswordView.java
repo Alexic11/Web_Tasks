@@ -1,6 +1,7 @@
 package carobnifrulas.web_tasks.ui.views;
 
 import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.html.H2;
 import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
@@ -39,6 +40,7 @@ public class ChangePasswordView extends View {
 
             carobnifrulas.web_tasks.ui.MainView.getMainView().setContent(services.menu.getDefaultView());
         });
+        save.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
 
         add(new VerticalLayout(p1, p2, save));
     }

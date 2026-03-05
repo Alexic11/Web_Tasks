@@ -7,6 +7,8 @@ import carobnifrulas.web_tasks.card.activity.CardActivity;
 import carobnifrulas.web_tasks.services.ServicesHolder;
 import carobnifrulas.web_tasks.ui.MainView;
 import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.component.button.ButtonVariant;
+import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.datetimepicker.DateTimePicker;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.grid.Grid;
@@ -95,11 +97,12 @@ public class TaskDialog extends Dialog {
             default -> String.valueOf(p);
         });
 
-        Select<Long> assignedTo = new Select<>();
+        ComboBox<Long> assignedTo = new ComboBox<>();
         assignedTo.setLabel("Dodijeli (opciono)");
         assignedTo.setWidth("420px");
-        assignedTo.setEmptySelectionAllowed(true);
-        assignedTo.setEmptySelectionCaption("— niko —");
+
+        assignedTo.setPlaceholder("Nedodijeljeno");
+        assignedTo.setClearButtonVisible(true);
 
         List<BoardMemberRepository.AssigneeRow> rows = services.boardMemberService.listAssignees(boardId);
 
@@ -131,7 +134,11 @@ public class TaskDialog extends Dialog {
         assignedTo.setReadOnly(!canWrite);
 
         Button save = new Button("Sačuvaj");
+        save.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
         Button cancel = new Button("Otkaži", e -> close());
+        cancel.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
         save.setEnabled(canWrite);
 
         save.addClickListener(e -> {

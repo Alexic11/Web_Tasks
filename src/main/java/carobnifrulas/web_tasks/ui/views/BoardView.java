@@ -7,6 +7,7 @@ import carobnifrulas.web_tasks.list.ListEntity;
 import carobnifrulas.web_tasks.ui.MainView;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.checkbox.Checkbox;
 import com.vaadin.flow.component.confirmdialog.ConfirmDialog;
 import com.vaadin.flow.component.dnd.DragSource;
@@ -101,6 +102,8 @@ public class BoardView extends View {
 
         Button back = new Button("Nazad",
                 e -> MainView.getMainView().setContent(services.menu.getDefaultView()));
+        back.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
         back.setIcon(VaadinIcon.ARROW_LEFT.create());
 
         H2 title = new H2(board.getName());
@@ -129,9 +132,13 @@ public class BoardView extends View {
         Button membersBtn = new Button("Members",
                 VaadinIcon.USERS.create(),
                 e -> new BoardMembersDialog(boardId, loggedUser.getId(), services).open());
+        membersBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
         membersBtn.setVisible(canManageMembers && !archived);
 
         Button closeBoard = new Button("Zatvori", VaadinIcon.LOCK.create());
+        closeBoard.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
         closeBoard.addClickListener(e -> {
             long openCnt;
             try {
@@ -268,6 +275,8 @@ public class BoardView extends View {
 
         Button addTask = new Button("+ Novi task",
                 e -> TaskDialog.create(services, boardId, list.getId(), loggedUser.getId()).open());
+        addTask.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
         addTask.setVisible(canWrite);
 
         header.add(h, addTask);
@@ -562,6 +571,7 @@ public class BoardView extends View {
             // 3) refresh
             refreshColumns.run();
         });
+        reset.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
 
         bar.add(assignee, pr, overdue, search, reset, count);
         bar.setFlexGrow(1, search);

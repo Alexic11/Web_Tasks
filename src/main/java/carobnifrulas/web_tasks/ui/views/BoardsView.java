@@ -5,6 +5,7 @@ import carobnifrulas.web_tasks.board.BoardRole;
 import carobnifrulas.web_tasks.ui.MainView;
 import carobnifrulas.web_tasks.ui.menu.MenuTab;
 import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.confirmdialog.ConfirmDialog;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.grid.Grid;
@@ -47,6 +48,7 @@ public class BoardsView extends View implements MenuTab {
         add(new H2("Boards"));
 
         Button create = new Button("Novi board", e -> openCreateDialog());
+        create.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
         create.setIcon(VaadinIcon.PLUS.create());
 
         configureGrid();
@@ -66,6 +68,8 @@ public class BoardsView extends View implements MenuTab {
         nameSearch.setValueChangeTimeout(300);
 
         Button reset = new Button("Reset");
+        reset.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
 
         Span count = new Span();
         count.getStyle()
@@ -135,6 +139,8 @@ public class BoardsView extends View implements MenuTab {
             Button open = new Button("Otvori",
                     e -> MainView.getMainView().setContent(new BoardView(b.getId())));
             open.setIcon(VaadinIcon.ARROW_RIGHT.create());
+            open.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
             return open;
         }).setHeader("Akcija").setAutoWidth(true);
 
@@ -143,6 +149,9 @@ public class BoardsView extends View implements MenuTab {
         // =========================
         grid.addComponentColumn(b -> {
             Button close = new Button("Zatvori", VaadinIcon.LOCK.create());
+
+            close.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
 
             boolean isGlobalAdmin = carobnifrulas.web_tasks.security.model.SecurityUtils.isGlobalAdmin(loggedUser);
             if (isGlobalAdmin) {
@@ -246,7 +255,13 @@ public class BoardsView extends View implements MenuTab {
             }
         });
 
+        save.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
+
         Button cancel = new Button("Otkaži", e -> d.close());
+
+        cancel.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
 
         HorizontalLayout actions = new HorizontalLayout(save, cancel);
         d.add(new VerticalLayout(name, actions));

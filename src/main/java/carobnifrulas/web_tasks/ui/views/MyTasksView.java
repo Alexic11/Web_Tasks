@@ -5,6 +5,7 @@ import carobnifrulas.web_tasks.card.CardRepository;
 import carobnifrulas.web_tasks.ui.MainView;
 import carobnifrulas.web_tasks.ui.menu.MenuTab;
 import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.checkbox.Checkbox;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.html.H2;
@@ -92,6 +93,8 @@ public class MyTasksView extends View implements MenuTab {
         overdue.setValue(filterState.overdueOnly);
 
         Button reset = new Button("Reset");
+        reset.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
 
         Span count = new Span();
         count.getStyle()

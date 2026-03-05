@@ -4,6 +4,7 @@ import carobnifrulas.web_tasks.ui.MainView;
 import carobnifrulas.web_tasks.ui.menu.MenuTab;
 import carobnifrulas.web_tasks.user.User;
 import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.confirmdialog.ConfirmDialog;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.grid.Grid;
@@ -106,6 +107,8 @@ public class AdminUsersView extends View implements MenuTab {
         must.setValue(filterState.mustChange);
 
         Button reset = new Button("Reset");
+        reset.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
 
         Span count = new Span();
         count.getStyle()
@@ -218,6 +221,8 @@ public class AdminUsersView extends View implements MenuTab {
 
         grid.addComponentColumn(u -> {
             Button reset = new Button("Reset PW", e -> openResetDialog(u));
+            reset.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
             reset.setIcon(VaadinIcon.REFRESH.create());
             return reset;
         }).setHeader("Reset").setAutoWidth(true);
@@ -225,6 +230,8 @@ public class AdminUsersView extends View implements MenuTab {
         // ✅ NOVO: Delete kolona
         grid.addComponentColumn(u -> {
             Button del = new Button("Obriši");
+            del.addThemeVariants(ButtonVariant.LUMO_ERROR);
+
             del.setIcon(VaadinIcon.TRASH.create());
             del.getStyle().set("color", "crimson");
 
@@ -302,7 +309,11 @@ public class AdminUsersView extends View implements MenuTab {
             }
         });
 
+        save.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
         Button cancel = new Button("Otkaži", e -> d.close());
+        cancel.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
 
         HorizontalLayout actions = new HorizontalLayout(save, cancel);
         VerticalLayout layout = new VerticalLayout(email, fullName, actions);
@@ -328,6 +339,8 @@ public class AdminUsersView extends View implements MenuTab {
         doReset.addThemeVariants(LUMO_PRIMARY);
 
         Button cancel = new Button("Otkaži", e -> d.close());
+        cancel.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
 
         d.add(new VerticalLayout(
                 new Paragraph("Korisnik će morati promijeniti lozinku pri sljedećem login-u."),

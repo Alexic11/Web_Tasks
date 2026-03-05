@@ -7,6 +7,7 @@ import carobnifrulas.web_tasks.user.User;
 
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.grid.Grid;
@@ -79,6 +80,7 @@ public class BoardMembersDialog extends Dialog {
                 Notification.show(ex.getMessage());
             }
         });
+        add.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
 
         HorizontalLayout row = new HorizontalLayout(userBox, role, add);
         row.setDefaultVerticalComponentAlignment(FlexComponent.Alignment.END);
