@@ -142,8 +142,12 @@ public class BoardMembersDialog extends Dialog {
                     Notification.show(ex.getMessage());
                 }
             });
+            remove.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
             return remove;
         }).setHeader("Ukloni").setAutoWidth(true);
+
+
 
         grid.setAllRowsVisible(true);
 

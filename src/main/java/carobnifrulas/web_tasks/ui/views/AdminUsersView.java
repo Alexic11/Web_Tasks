@@ -360,6 +360,8 @@ public class AdminUsersView extends View implements MenuTab {
         info.getStyle().set("white-space", "pre-wrap").set("font-family", "monospace");
 
         Button ok = new Button("OK", e -> d.close());
+        ok.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
         d.add(new VerticalLayout(info, ok));
         d.open();
     }
