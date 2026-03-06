@@ -122,6 +122,9 @@ public class BoardsView extends View implements MenuTab {
     }
 
     private void configureGrid() {
+        grid.removeAllColumns(); // spriječi dupliranje kolona kad se view refresha
+
+
         grid.setWidthFull();
         grid.addClassName("boards-grid");
         grid.getStyle().set("cursor", "pointer");
