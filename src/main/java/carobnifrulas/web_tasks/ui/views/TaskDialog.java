@@ -4,14 +4,17 @@ import carobnifrulas.web_tasks.board.BoardMemberRepository;
 import carobnifrulas.web_tasks.board.BoardRole;
 import carobnifrulas.web_tasks.card.Card;
 import carobnifrulas.web_tasks.card.activity.CardActivity;
+import carobnifrulas.web_tasks.card.attachment.CardAttachment;
 import carobnifrulas.web_tasks.services.ServicesHolder;
 import carobnifrulas.web_tasks.ui.MainView;
+import carobnifrulas.web_tasks.user.User;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.datetimepicker.DateTimePicker;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.grid.Grid;
+import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.H3;
 import com.vaadin.flow.component.html.H4;
 import com.vaadin.flow.component.html.Span;
@@ -19,19 +22,29 @@ import com.vaadin.flow.component.messages.MessageInput;
 import com.vaadin.flow.component.messages.MessageList;
 import com.vaadin.flow.component.messages.MessageListItem;
 import com.vaadin.flow.component.notification.Notification;
+import com.vaadin.flow.component.orderedlayout.FlexComponent.Alignment;
+import com.vaadin.flow.component.orderedlayout.FlexComponent.JustifyContentMode;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.select.Select;
 import com.vaadin.flow.component.textfield.TextArea;
 import com.vaadin.flow.component.textfield.TextField;
+import com.vaadin.flow.component.upload.Upload;
+import com.vaadin.flow.server.streams.UploadHandler;
 
+import java.io.ByteArrayInputStream;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
+
+import com.vaadin.flow.component.html.Anchor;
+import com.vaadin.flow.server.streams.DownloadHandler;
+
 
 public class TaskDialog extends Dialog {
 
@@ -39,9 +52,9 @@ public class TaskDialog extends Dialog {
 
     private final ServicesHolder services;
     private final Long boardId;
-    private final Long listId;     // za create
+    private final Long listId;
     private final Long actorUserId;
-    private final Card existing;   // null => create
+    private final Card existing;
 
     public static TaskDialog create(ServicesHolder services, Long boardId, Long listId, Long actorUserId) {
         return new TaskDialog(services, boardId, listId, actorUserId, null);
@@ -69,9 +82,6 @@ public class TaskDialog extends Dialog {
         setDraggable(true);
         setResizable(true);
 
-        // =========================
-        // ✅ FIELDS
-        // =========================
         TextField title = new TextField("Naslov");
         title.setWidthFull();
 
@@ -100,7 +110,6 @@ public class TaskDialog extends Dialog {
         ComboBox<Long> assignedTo = new ComboBox<>();
         assignedTo.setLabel("Dodijeli (opciono)");
         assignedTo.setWidth("420px");
-
         assignedTo.setPlaceholder("Nedodijeljeno");
         assignedTo.setClearButtonVisible(true);
 
@@ -110,7 +119,9 @@ public class TaskDialog extends Dialog {
                 BoardMemberRepository.AssigneeRow::getUserId,
                 r -> {
                     String name = (r.getFullName() == null || r.getFullName().isBlank()) ? "" : r.getFullName().trim();
-                    if (!name.isEmpty()) return name + " (" + r.getEmail() + ")";
+                    if (!name.isEmpty()) {
+                        return name + " (" + r.getEmail() + ")";
+                    }
                     return r.getEmail();
                 }
         ));
@@ -184,9 +195,6 @@ public class TaskDialog extends Dialog {
         row2.setWidthFull();
         row2.setFlexGrow(1, assignedTo);
 
-        // =========================
-        // ✅ DETAILS "CARD"
-        // =========================
         VerticalLayout detailsCard = new VerticalLayout(
                 new H4(isEdit ? "Detalji" : "Kreiranje"),
                 title,
@@ -199,20 +207,21 @@ public class TaskDialog extends Dialog {
         detailsCard.setWidthFull();
         applyCardStyle(detailsCard);
 
-        // create: samo detalji
         if (!isEdit) {
             add(detailsCard);
             return;
         }
 
-        // edit: komentari i activity ispod
+        VerticalLayout attachmentsCard = buildAttachmentsSection(existing.getId(), canWrite);
+        applyCardStyle(attachmentsCard);
+
         VerticalLayout commentsCard = buildCommentsSection(existing.getId(), canWrite);
         applyCardStyle(commentsCard);
 
         VerticalLayout activityCard = buildActivitySection(existing.getId());
         applyCardStyle(activityCard);
 
-        VerticalLayout root = new VerticalLayout(detailsCard, commentsCard, activityCard);
+        VerticalLayout root = new VerticalLayout(detailsCard, attachmentsCard, commentsCard, activityCard);
         root.setPadding(false);
         root.setSpacing(true);
         root.setWidthFull();
@@ -223,8 +232,6 @@ public class TaskDialog extends Dialog {
     private VerticalLayout buildActivitySection(Long cardId) {
         Grid<CardActivity> activityGrid = new Grid<>(CardActivity.class, false);
         activityGrid.setWidthFull();
-
-        // scroll: da ne raste beskonačno
         activityGrid.setHeight("280px");
 
         activityGrid.addColumn(a -> formatInstant(a.getCreatedAt()))
@@ -255,10 +262,7 @@ public class TaskDialog extends Dialog {
         List<CardActivity> acts = services.cardActivityService.listForCard(cardId);
         activityGrid.setItems(acts);
 
-        VerticalLayout wrap = new VerticalLayout(
-                new H4("Activity"),
-                activityGrid
-        );
+        VerticalLayout wrap = new VerticalLayout(new H4("Activity"), activityGrid);
         wrap.setPadding(false);
         wrap.setSpacing(true);
         wrap.setWidthFull();
@@ -278,7 +282,6 @@ public class TaskDialog extends Dialog {
         MessageList list = new MessageList();
         list.setWidth("95%");
 
-        // scroll + border unutar card-a
         list.getStyle()
                 .set("max-height", "220px")
                 .set("overflow", "auto")
@@ -337,6 +340,131 @@ public class TaskDialog extends Dialog {
         return root;
     }
 
+    private VerticalLayout buildAttachmentsSection(Long cardId, boolean canWrite) {
+        VerticalLayout root = new VerticalLayout();
+        root.setPadding(false);
+        root.setSpacing(true);
+        root.setWidthFull();
+
+        H3 title = new H3("Attachments");
+        title.getStyle().set("margin", "0");
+
+        Span hint = new Span(
+                canWrite
+                        ? "Dodaj fajl uz task."
+                        : "Možeš pregledati attachmente, ali nemaš pravo dodavanja ili brisanja."
+        );
+        hint.getStyle().set("font-size", "var(--lumo-font-size-s)");
+        hint.getStyle().set("color", "var(--lumo-secondary-text-color)");
+
+        Div filesWrap = new Div();
+        filesWrap.setWidthFull();
+        filesWrap.getStyle()
+                .set("border", "1px solid var(--lumo-contrast-10pct)")
+                .set("border-radius", "10px")
+                .set("padding", "10px");
+
+        Upload upload = new Upload(UploadHandler.inMemory((metadata, data) -> {
+            try {
+                User actor = requireActorUser();
+                try (ByteArrayInputStream in = new ByteArrayInputStream(data)) {
+                    services.cardAttachmentService.upload(
+                            cardId,
+                            actor,
+                            metadata.fileName(),
+                            metadata.contentType(),
+                            in
+                    );
+                }
+                getUI().ifPresent(ui -> ui.access(() -> {
+                    Notification.show("Fajl uspješno dodan.");
+                    refreshAttachmentsList(filesWrap, cardId, canWrite);
+                }));
+            } catch (Exception ex) {
+                throw new RuntimeException(ex);
+            }
+        }));
+
+        upload.setWidthFull();
+        upload.setDropLabel(new Span("Prevuci fajl ovdje ili klikni za odabir."));
+        upload.setMaxFiles(10);
+        upload.setEnabled(canWrite);
+
+        refreshAttachmentsList(filesWrap, cardId, canWrite);
+
+        root.add(title, hint, upload, filesWrap);
+        return root;
+    }
+
+    private void refreshAttachmentsList(Div filesWrap, Long cardId, boolean canWrite) {
+        filesWrap.removeAll();
+
+        try {
+            User actor = requireActorUser();
+            List<CardAttachment> attachments = services.cardAttachmentService.findByCard(cardId, actor);
+
+            if (attachments.isEmpty()) {
+                Span empty = new Span("Nema dodanih fajlova.");
+                empty.getStyle().set("color", "var(--lumo-secondary-text-color)");
+                filesWrap.add(empty);
+                return;
+            }
+
+            for (CardAttachment a : attachments) {
+                HorizontalLayout row = new HorizontalLayout();
+                row.setWidthFull();
+                row.setAlignItems(Alignment.CENTER);
+                row.setJustifyContentMode(JustifyContentMode.BETWEEN);
+
+                String contentType = (a.getContentType() == null || a.getContentType().isBlank())
+                        ? "nepoznat tip"
+                        : a.getContentType();
+
+                Span info = new Span(
+                        a.getOriginalFilename() + " (" + humanReadableSize(a.getSizeBytes()) + ", " + contentType + ")"
+                );
+                info.getStyle().set("font-size", "var(--lumo-font-size-s)");
+
+                HorizontalLayout actions = new HorizontalLayout();
+                actions.setSpacing(true);
+
+                Anchor downloadLink = buildDownloadLink(a);
+                actions.add(downloadLink);
+
+                if (canWrite) {
+                    Button deleteBtn = new Button("Obriši");
+                    deleteBtn.addThemeVariants(ButtonVariant.LUMO_ERROR, ButtonVariant.LUMO_TERTIARY);
+
+                    deleteBtn.addClickListener(e -> {
+                        try {
+                            User actor2 = requireActorUser();
+                            services.cardAttachmentService.delete(a.getId(), actor2);
+                            Notification.show("Attachment obrisan.");
+                            refreshAttachmentsList(filesWrap, cardId, canWrite);
+                        } catch (Exception ex) {
+                            Notification.show(ex.getMessage(), 4000, Notification.Position.MIDDLE);
+                        }
+                    });
+
+                    actions.add(deleteBtn);
+                }
+
+                row.add(info, actions);
+                row.expand(info);
+                filesWrap.add(row);
+            }
+
+        } catch (Exception ex) {
+            Notification.show("Ne mogu učitati attachmente: " + ex.getMessage(),
+                    4000, Notification.Position.MIDDLE);
+        }
+    }
+
+    private User requireActorUser() {
+        return services.userService.findById(actorUserId)
+                .orElseThrow(() -> new IllegalStateException("Prijavljeni korisnik nije pronađen."));
+    }
+
     private static void applyCardStyle(VerticalLayout layout) {
         layout.getStyle()
                 .set("border", "1px solid var(--lumo-contrast-10pct)")
@@ -352,5 +480,50 @@ public class TaskDialog extends Dialog {
         if (ins == null) return "—";
         LocalDateTime dt = LocalDateTime.ofInstant(ins, ZoneId.systemDefault());
         return DT_FMT.format(dt);
+    }
+
+    private static String humanReadableSize(Long sizeBytes) {
+        if (sizeBytes == null) return "0 B";
+
+        double size = sizeBytes;
+        String[] units = {"B", "KB", "MB", "GB"};
+        int unitIndex = 0;
+
+        while (size >= 1024 && unitIndex < units.length - 1) {
+            size /= 1024;
+            unitIndex++;
+        }
+
+        if (unitIndex == 0) {
+            return ((long) size) + " " + units[unitIndex];
+        }
+
+        return String.format(Locale.US, "%.1f %s", size, units[unitIndex]);
+    }
+
+    private Anchor buildDownloadLink(CardAttachment attachment) {
+        Anchor download = new Anchor((DownloadHandler) event -> {
+            User actor = requireActorUser();
+            var downloadable = services.cardAttachmentService.getDownloadable(attachment.getId(), actor);
+
+            event.setFileName(attachment.getOriginalFilename());
+
+            if (attachment.getContentType() != null && !attachment.getContentType().isBlank()) {
+                event.setContentType(attachment.getContentType());
+            }
+
+            try (var in = java.nio.file.Files.newInputStream(downloadable.path());
+                 var out = event.getOutputStream()) {
+                in.transferTo(out);
+            }
+        }, "");
+
+        download.getElement().setAttribute("download", true);
+
+        Button downloadBtn = new Button("Preuzmi");
+        downloadBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+        download.add(downloadBtn);
+
+        return download;
     }
 }
