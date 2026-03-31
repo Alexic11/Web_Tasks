@@ -3,6 +3,7 @@ package carobnifrulas.web_tasks.card;
 import carobnifrulas.web_tasks.board.BoardMemberService;
 import carobnifrulas.web_tasks.card.activity.CardActivityService;
 import carobnifrulas.web_tasks.list.ListService;
+import carobnifrulas.web_tasks.notification.NotificationService;
 import carobnifrulas.web_tasks.security.model.AppUserService;
 import carobnifrulas.web_tasks.user.User;
 import org.springframework.stereotype.Service;
@@ -20,17 +21,20 @@ public class CardService {
     private final ListService lists;
     private final AppUserService userService;
     private final CardActivityService activity;
+    private final NotificationService notificationService;
 
     public CardService(CardRepository cards,
                        BoardMemberService boardMemberService,
                        ListService lists,
                        AppUserService userService,
-                       CardActivityService activity) {
+                       CardActivityService activity,
+                       NotificationService notificationService) {
         this.cards = cards;
         this.boardMemberService = boardMemberService;
         this.lists = lists;
         this.userService = userService;
         this.activity = activity;
+        this.notificationService = notificationService;
     }
 
     public List<Card> findByList(Long listId) {
@@ -45,8 +49,6 @@ public class CardService {
     public List<Card> findAssignedTo(Long userId) {
         return cards.findByAssignedToAndArchivedAtIsNullOrderByUpdatedAtDesc(userId);
     }
-
-    // ================== ASSIGN / UNASSIGN ==================
 
     @Transactional
     public void assignToMe(Long cardId, Long myUserId) {
@@ -63,6 +65,8 @@ public class CardService {
         cards.save(c);
 
         activity.logAssign(c.getId(), myUserId, myUserId);
+
+        // Ne šaljemo notifikaciju samom sebi kad klikne "Preuzmi"
     }
 
     @Transactional
@@ -87,8 +91,6 @@ public class CardService {
         activity.logUnassign(c.getId(), myUserId, oldAssignee);
     }
 
-    // ================== MOVE LIST ==================
-
     @Transactional
     public void moveToList(Long cardId, Long targetListId, Long actorUserId) {
         Card c = requireById(cardId);
@@ -106,15 +108,12 @@ public class CardService {
         activity.logMoveList(c.getId(), actorUserId, fromListId, targetListId);
     }
 
-    // ⚠️ Ostavljeno radi kompatibilnosti sa starim pozivima, ali bez security/log
     @Transactional
     public void moveToList(Long cardId, Long targetListId) {
         Card c = requireById(cardId);
         c.setListId(targetListId);
         cards.save(c);
     }
-
-    // ================== CREATE / UPDATE ==================
 
     @Transactional
     public Card createCard(Long boardId,
@@ -152,23 +151,23 @@ public class CardService {
         c.setCreatedBy(createdByUserId);
         c.setPosition(pos);
 
-        // ✅ prvo save da dobije ID
         Card saved = cards.save(c);
 
-        // ✅ log create
         activity.logCreated(saved.getId(), createdByUserId, saved.getTitle());
 
-        // ✅ ako je odmah dodijeljen, log assign
         if (saved.getAssignedTo() != null) {
             activity.logAssign(saved.getId(), createdByUserId, saved.getAssignedTo());
+
+            userService.findById(saved.getAssignedTo()).ifPresent(recipient -> {
+                User actor = userService.findById(createdByUserId).orElse(null);
+                notificationService.createTaskAssignedNotification(recipient, actor, saved);
+            });
         }
 
-        // ✅ ako je rok odmah postavljen
         if (saved.getDueAt() != null) {
             activity.logDueChange(saved.getId(), createdByUserId, null, saved.getDueAt());
         }
 
-        // ✅ ako je prioritet != 1
         if (saved.getPriority() != null && saved.getPriority() != 1) {
             activity.logPriorityChange(saved.getId(), createdByUserId, 1, saved.getPriority());
         }
@@ -195,14 +194,12 @@ public class CardService {
             boardMemberService.requireMember(c.getBoardId(), assignedToUserId);
         }
 
-        // OLD values
         Integer oldPr = c.getPriority();
         LocalDateTime oldDue = c.getDueAt();
         Long oldAssignee = c.getAssignedTo();
         String oldTitle = c.getTitle();
         String oldDesc = c.getDescription();
 
-        // SET new
         c.setAssignedTo(assignedToUserId);
         c.setTitle(normalizeTitle(title));
         c.setDescription(blankToNull(description));
@@ -211,7 +208,6 @@ public class CardService {
 
         Card saved = cards.save(c);
 
-        // LOG diffs
         if (!eqInt(oldPr, saved.getPriority())) {
             activity.logPriorityChange(saved.getId(), actorUserId, oldPr, saved.getPriority());
         }
@@ -225,6 +221,16 @@ public class CardService {
                 activity.logUnassign(saved.getId(), actorUserId, oldAssignee);
             } else {
                 activity.logAssign(saved.getId(), actorUserId, saved.getAssignedTo());
+
+                userService.findById(saved.getAssignedTo()).ifPresent(recipient -> {
+                    User actor = userService.findById(actorUserId).orElse(null);
+
+                    if (oldAssignee == null) {
+                        notificationService.createTaskAssignedNotification(recipient, actor, saved);
+                    } else {
+                        notificationService.createTaskReassignedNotification(recipient, actor, saved);
+                    }
+                });
             }
         }
 
@@ -236,8 +242,6 @@ public class CardService {
 
         return saved;
     }
-
-    // ================== DONE ==================
 
     @Transactional
     public void markDone(Long cardId, Long actorUserId) {
@@ -259,13 +263,9 @@ public class CardService {
         if (!doneListId.equals(fromListId)) {
             c.setListId(doneListId);
             cards.save(c);
-
-            // ✅ specijalni DONE log (da ne dupliramo MOVED_LIST)
             activity.logDone(c.getId(), actorUserId, fromListId, doneListId);
         }
     }
-
-    // ================== MY TASKS / DASHBOARD ==================
 
     public List<CardRepository.MyTaskRow> findMyTasks(Long userId) {
         return cards.findMyTasks(userId);
@@ -275,8 +275,6 @@ public class CardService {
         boolean globalAdmin = "admin@local".equalsIgnoreCase(loggedUser.getEmail());
         return cards.findTaskRows(globalAdmin ? null : loggedUser.getId());
     }
-
-    // ================== REORDER (DnD) ==================
 
     @Transactional
     public void reorderWithinList(Long cardId, Long listId, int targetIndex, Long actorUserId) {
@@ -290,7 +288,7 @@ public class CardService {
         BigDecimal oldPos = moving.getPosition();
 
         List<Card> items = cards.findByListIdAndArchivedAtIsNullOrderByPositionAsc(listId);
-        items.removeIf(c -> c.getId().equals(cardId));
+        items.removeIf(c2 -> c2.getId().equals(cardId));
 
         if (targetIndex < 0) targetIndex = 0;
         if (targetIndex > items.size()) targetIndex = items.size();
@@ -310,7 +308,7 @@ public class CardService {
             if (newPos.equals(prev) || newPos.equals(next)) {
                 reindexList(listId);
                 items = cards.findByListIdAndArchivedAtIsNullOrderByPositionAsc(listId);
-                items.removeIf(c -> c.getId().equals(cardId));
+                items.removeIf(c2 -> c2.getId().equals(cardId));
 
                 if (targetIndex == 0) {
                     newPos = items.get(0).getPosition().subtract(new BigDecimal("1000.000000"));
@@ -328,11 +326,9 @@ public class CardService {
         moving.setPosition(newPos);
         cards.save(moving);
 
-        // ✅ ako je promijenio listu (DnD u drugu kolonu) -> MOVED_LIST
         if (oldListId != null && !oldListId.equals(listId)) {
             activity.logMoveList(moving.getId(), actorUserId, oldListId, listId);
         } else {
-            // ✅ reorder unutar iste liste
             activity.logReorder(moving.getId(), actorUserId, oldPos, newPos);
         }
     }
@@ -348,14 +344,10 @@ public class CardService {
         cards.saveAll(items);
     }
 
-    // ================== BOARD CLOSE SUPPORT ==================
-
     public long countOpenTasks(Long boardId) {
         Long doneListId = lists.requireLastListId(boardId);
         return cards.countOpenInBoard(boardId, doneListId);
     }
-
-    // ================= helpers =================
 
     private boolean isGlobalAdmin(Long userId) {
         return userService.findById(userId)

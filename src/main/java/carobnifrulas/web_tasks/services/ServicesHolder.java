@@ -7,6 +7,7 @@ import carobnifrulas.web_tasks.card.activity.CardActivityService;
 import carobnifrulas.web_tasks.card.attachment.CardAttachmentService;
 import carobnifrulas.web_tasks.card.comment.CardCommentService;
 import carobnifrulas.web_tasks.list.ListService;
+import carobnifrulas.web_tasks.notification.NotificationService;
 import carobnifrulas.web_tasks.security.model.AppUserService;
 import carobnifrulas.web_tasks.ui.menu.Menu;
 import org.springframework.stereotype.Component;
@@ -22,6 +23,7 @@ public class ServicesHolder {
     public final CardActivityService cardActivityService;
     public final CardCommentService cardCommentService;
     public final CardAttachmentService cardAttachmentService;
+    public final NotificationService notificationService;
 
     public final Menu menu;
 
@@ -33,6 +35,7 @@ public class ServicesHolder {
                           CardActivityService cardActivityService,
                           CardCommentService cardCommentService,
                           CardAttachmentService cardAttachmentService,
+                          NotificationService notificationService,
                           Menu menu) {
         this.userService = userService;
         this.boardService = boardService;
@@ -42,6 +45,7 @@ public class ServicesHolder {
         this.cardActivityService = cardActivityService;
         this.cardCommentService = cardCommentService;
         this.cardAttachmentService = cardAttachmentService;
+        this.notificationService = notificationService;
         this.menu = menu;
     }
 }
