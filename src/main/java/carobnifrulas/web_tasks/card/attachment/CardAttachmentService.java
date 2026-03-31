@@ -2,7 +2,9 @@ package carobnifrulas.web_tasks.card.attachment;
 
 import carobnifrulas.web_tasks.board.BoardMemberRepository;
 import carobnifrulas.web_tasks.card.Card;
+import carobnifrulas.web_tasks.card.CardRealtimeBus;
 import carobnifrulas.web_tasks.card.CardRepository;
+import carobnifrulas.web_tasks.card.activity.CardActivityService;
 import carobnifrulas.web_tasks.user.User;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,15 +21,18 @@ public class CardAttachmentService {
     private final CardRepository cardRepository;
     private final BoardMemberRepository boardMemberRepository;
     private final AttachmentStorageService storageService;
+    private final CardActivityService activityService;
 
     public CardAttachmentService(CardAttachmentRepository attachmentRepository,
                                  CardRepository cardRepository,
                                  BoardMemberRepository boardMemberRepository,
-                                 AttachmentStorageService storageService) {
+                                 AttachmentStorageService storageService,
+                                 CardActivityService activityService) {
         this.attachmentRepository = attachmentRepository;
         this.cardRepository = cardRepository;
         this.boardMemberRepository = boardMemberRepository;
         this.storageService = storageService;
+        this.activityService = activityService;
     }
 
     @Transactional(readOnly = true)
@@ -57,7 +62,17 @@ public class CardAttachmentService {
         attachment.setContentType(stored.contentType());
         attachment.setSizeBytes(stored.sizeBytes());
 
-        return attachmentRepository.save(attachment);
+        CardAttachment saved = attachmentRepository.save(attachment);
+
+        activityService.logUpdated(
+                cardId,
+                user.getId(),
+                "Dodan attachment: " + saved.getOriginalFilename()
+        );
+
+        CardRealtimeBus.publish(cardId, CardRealtimeBus.ChangeType.ALL);
+
+        return saved;
     }
 
     @Transactional(readOnly = true)
@@ -80,8 +95,18 @@ public class CardAttachmentService {
         Card card = requireCard(attachment.getCardId());
         requireWriteAccess(card.getBoardId(), user);
 
+        String fileName = attachment.getOriginalFilename();
+
         attachmentRepository.delete(attachment);
         storageService.delete(attachment.getCardId(), attachment.getStoredFilename());
+
+        activityService.logUpdated(
+                card.getId(),
+                user.getId(),
+                "Obrisan attachment: " + fileName
+        );
+
+        CardRealtimeBus.publish(card.getId(), CardRealtimeBus.ChangeType.ALL);
     }
 
     private CardAttachment requireAttachment(Long attachmentId) {

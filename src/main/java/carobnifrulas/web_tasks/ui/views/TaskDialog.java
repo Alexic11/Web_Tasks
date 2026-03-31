@@ -3,6 +3,7 @@ package carobnifrulas.web_tasks.ui.views;
 import carobnifrulas.web_tasks.board.BoardMemberRepository;
 import carobnifrulas.web_tasks.board.BoardRole;
 import carobnifrulas.web_tasks.card.Card;
+import carobnifrulas.web_tasks.card.CardRealtimeBus;
 import carobnifrulas.web_tasks.card.activity.CardActivity;
 import carobnifrulas.web_tasks.card.attachment.CardAttachment;
 import carobnifrulas.web_tasks.services.ServicesHolder;
@@ -14,6 +15,7 @@ import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.datetimepicker.DateTimePicker;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.grid.Grid;
+import com.vaadin.flow.component.html.Anchor;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.H3;
 import com.vaadin.flow.component.html.H4;
@@ -30,7 +32,9 @@ import com.vaadin.flow.component.select.Select;
 import com.vaadin.flow.component.textfield.TextArea;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.component.upload.Upload;
+import com.vaadin.flow.server.streams.DownloadHandler;
 import com.vaadin.flow.server.streams.UploadHandler;
+import com.vaadin.flow.shared.Registration;
 
 import java.io.ByteArrayInputStream;
 import java.time.LocalDateTime;
@@ -42,10 +46,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import com.vaadin.flow.component.html.Anchor;
-import com.vaadin.flow.server.streams.DownloadHandler;
-
-
 public class TaskDialog extends Dialog {
 
     private static final DateTimeFormatter DT_FMT = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
@@ -55,6 +55,17 @@ public class TaskDialog extends Dialog {
     private final Long listId;
     private final Long actorUserId;
     private final Card existing;
+
+    private Grid<CardActivity> activityGrid;
+    private Long currentActivityCardId;
+
+    private Div attachmentsFilesWrap;
+    private boolean attachmentsCanWrite;
+
+    private MessageList commentsList;
+    private Runnable reloadComments;
+
+    private Registration realtimeRegistration;
 
     public static TaskDialog create(ServicesHolder services, Long boardId, Long listId, Long actorUserId) {
         return new TaskDialog(services, boardId, listId, actorUserId, null);
@@ -227,10 +238,39 @@ public class TaskDialog extends Dialog {
         root.setWidthFull();
 
         add(root);
+
+        registerRealtime(existing.getId());
+    }
+
+    private void registerRealtime(Long cardId) {
+        realtimeRegistration = CardRealtimeBus.register(cardId, changeType ->
+                getUI().ifPresent(ui -> ui.access(this::refreshAllSections))
+        );
+
+        addDetachListener(e -> {
+            if (realtimeRegistration != null) {
+                realtimeRegistration.remove();
+                realtimeRegistration = null;
+            }
+        });
+    }
+
+    private void refreshAllSections() {
+        refreshActivitySection();
+
+        if (attachmentsFilesWrap != null && currentActivityCardId != null) {
+            refreshAttachmentsList(attachmentsFilesWrap, currentActivityCardId, attachmentsCanWrite);
+        }
+
+        if (reloadComments != null) {
+            reloadComments.run();
+        }
     }
 
     private VerticalLayout buildActivitySection(Long cardId) {
-        Grid<CardActivity> activityGrid = new Grid<>(CardActivity.class, false);
+        this.currentActivityCardId = cardId;
+
+        activityGrid = new Grid<>(CardActivity.class, false);
         activityGrid.setWidthFull();
         activityGrid.setHeight("280px");
 
@@ -259,8 +299,7 @@ public class TaskDialog extends Dialog {
                 .setAutoWidth(true)
                 .setFlexGrow(1);
 
-        List<CardActivity> acts = services.cardActivityService.listForCard(cardId);
-        activityGrid.setItems(acts);
+        refreshActivitySection();
 
         VerticalLayout wrap = new VerticalLayout(new H4("Activity"), activityGrid);
         wrap.setPadding(false);
@@ -268,6 +307,15 @@ public class TaskDialog extends Dialog {
         wrap.setWidthFull();
 
         return wrap;
+    }
+
+    private void refreshActivitySection() {
+        if (activityGrid == null || currentActivityCardId == null) {
+            return;
+        }
+
+        List<CardActivity> acts = services.cardActivityService.listForCard(currentActivityCardId);
+        activityGrid.setItems(acts);
     }
 
     private VerticalLayout buildCommentsSection(Long cardId, boolean canWrite) {
@@ -279,15 +327,15 @@ public class TaskDialog extends Dialog {
         H3 title = new H3("Komentari");
         title.getStyle().set("margin", "0");
 
-        MessageList list = new MessageList();
-        list.setWidth("95%");
-
-        list.getStyle()
+        commentsList = new MessageList();
+        commentsList.setWidthFull();
+        commentsList.getStyle()
                 .set("max-height", "220px")
                 .set("overflow", "auto")
                 .set("border", "1px solid var(--lumo-contrast-10pct)")
                 .set("border-radius", "10px")
-                .set("padding", "8px");
+                .set("padding", "8px")
+                .set("box-sizing", "border-box");
 
         Span hint = new Span(
                 canWrite ? "Napiši komentar i pritisni Enter." : "Nemaš prava da dodaješ komentare."
@@ -295,7 +343,7 @@ public class TaskDialog extends Dialog {
         hint.getStyle().set("font-size", "var(--lumo-font-size-s)");
         hint.getStyle().set("color", "var(--lumo-secondary-text-color)");
 
-        Runnable reload = () -> {
+        reloadComments = () -> {
             try {
                 var rows = services.cardCommentService.listForCard(cardId, actorUserId);
                 var items = new ArrayList<MessageListItem>();
@@ -313,14 +361,14 @@ public class TaskDialog extends Dialog {
                     items.add(new MessageListItem(r.getBody(), when, author));
                 }
 
-                list.setItems(items);
+                commentsList.setItems(items);
             } catch (Exception ex) {
                 Notification.show("Ne mogu učitati komentare: " + ex.getMessage(),
                         4000, Notification.Position.MIDDLE);
             }
         };
 
-        reload.run();
+        reloadComments.run();
 
         MessageInput input = new MessageInput();
         input.setWidthFull();
@@ -329,18 +377,21 @@ public class TaskDialog extends Dialog {
         input.addSubmitListener(e -> {
             try {
                 services.cardCommentService.addComment(cardId, actorUserId, e.getValue());
-                reload.run();
+                reloadComments.run();
+                refreshActivitySection();
             } catch (Exception ex) {
                 Notification.show("Greška: " + ex.getMessage(),
                         4000, Notification.Position.MIDDLE);
             }
         });
 
-        root.add(title, list, hint, input);
+        root.add(title, commentsList, hint, input);
         return root;
     }
 
     private VerticalLayout buildAttachmentsSection(Long cardId, boolean canWrite) {
+        this.attachmentsCanWrite = canWrite;
+
         VerticalLayout root = new VerticalLayout();
         root.setPadding(false);
         root.setSpacing(true);
@@ -357,12 +408,14 @@ public class TaskDialog extends Dialog {
         hint.getStyle().set("font-size", "var(--lumo-font-size-s)");
         hint.getStyle().set("color", "var(--lumo-secondary-text-color)");
 
-        Div filesWrap = new Div();
-        filesWrap.setWidthFull();
-        filesWrap.getStyle()
+        attachmentsFilesWrap = new Div();
+        attachmentsFilesWrap.setWidthFull();
+        attachmentsFilesWrap.getStyle()
                 .set("border", "1px solid var(--lumo-contrast-10pct)")
                 .set("border-radius", "10px")
-                .set("padding", "10px");
+                .set("padding", "8px")
+                .set("box-sizing", "border-box")
+                .set("overflow", "hidden");
 
         Upload upload = new Upload(UploadHandler.inMemory((metadata, data) -> {
             try {
@@ -376,9 +429,11 @@ public class TaskDialog extends Dialog {
                             in
                     );
                 }
+
                 getUI().ifPresent(ui -> ui.access(() -> {
                     Notification.show("Fajl uspješno dodan.");
-                    refreshAttachmentsList(filesWrap, cardId, canWrite);
+                    refreshAttachmentsList(attachmentsFilesWrap, cardId, canWrite);
+                    refreshActivitySection();
                 }));
             } catch (Exception ex) {
                 throw new RuntimeException(ex);
@@ -389,10 +444,11 @@ public class TaskDialog extends Dialog {
         upload.setDropLabel(new Span("Prevuci fajl ovdje ili klikni za odabir."));
         upload.setMaxFiles(10);
         upload.setEnabled(canWrite);
+        upload.addClassName("attachments-upload");
 
-        refreshAttachmentsList(filesWrap, cardId, canWrite);
+        refreshAttachmentsList(attachmentsFilesWrap, cardId, canWrite);
 
-        root.add(title, hint, upload, filesWrap);
+        root.add(title, hint, upload, attachmentsFilesWrap);
         return root;
     }
 
@@ -413,8 +469,15 @@ public class TaskDialog extends Dialog {
             for (CardAttachment a : attachments) {
                 HorizontalLayout row = new HorizontalLayout();
                 row.setWidthFull();
+                row.setPadding(false);
+                row.setSpacing(true);
                 row.setAlignItems(Alignment.CENTER);
                 row.setJustifyContentMode(JustifyContentMode.BETWEEN);
+
+                row.getStyle()
+                        .set("padding", "6px 0")
+                        .set("border-bottom", "1px solid var(--lumo-contrast-10pct)")
+                        .set("box-sizing", "border-box");
 
                 String contentType = (a.getContentType() == null || a.getContentType().isBlank())
                         ? "nepoznat tip"
@@ -423,24 +486,31 @@ public class TaskDialog extends Dialog {
                 Span info = new Span(
                         a.getOriginalFilename() + " (" + humanReadableSize(a.getSizeBytes()) + ", " + contentType + ")"
                 );
-                info.getStyle().set("font-size", "var(--lumo-font-size-s)");
+                info.getStyle()
+                        .set("font-size", "var(--lumo-font-size-s)")
+                        .set("word-break", "break-word");
 
                 HorizontalLayout actions = new HorizontalLayout();
+                actions.setPadding(false);
                 actions.setSpacing(true);
+                actions.setAlignItems(Alignment.CENTER);
+                actions.getStyle().set("flex-shrink", "0");
 
                 Anchor downloadLink = buildDownloadLink(a);
                 actions.add(downloadLink);
 
                 if (canWrite) {
                     Button deleteBtn = new Button("Obriši");
-                    deleteBtn.addThemeVariants(ButtonVariant.LUMO_ERROR, ButtonVariant.LUMO_TERTIARY);
+                    deleteBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
 
                     deleteBtn.addClickListener(e -> {
                         try {
                             User actor2 = requireActorUser();
                             services.cardAttachmentService.delete(a.getId(), actor2);
+
                             Notification.show("Attachment obrisan.");
                             refreshAttachmentsList(filesWrap, cardId, canWrite);
+                            refreshActivitySection();
                         } catch (Exception ex) {
                             Notification.show(ex.getMessage(), 4000, Notification.Position.MIDDLE);
                         }
@@ -469,7 +539,9 @@ public class TaskDialog extends Dialog {
         layout.getStyle()
                 .set("border", "1px solid var(--lumo-contrast-10pct)")
                 .set("border-radius", "12px")
-                .set("padding", "12px");
+                .set("padding", "12px")
+                .set("box-sizing", "border-box")
+                .set("overflow", "hidden");
     }
 
     private static String nullSafe(String s) {
@@ -521,7 +593,7 @@ public class TaskDialog extends Dialog {
         download.getElement().setAttribute("download", true);
 
         Button downloadBtn = new Button("Preuzmi");
-        downloadBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+        downloadBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
         download.add(downloadBtn);
 
         return download;

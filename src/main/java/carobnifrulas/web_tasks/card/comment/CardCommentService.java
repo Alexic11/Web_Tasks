@@ -1,10 +1,11 @@
 package carobnifrulas.web_tasks.card.comment;
 
+import carobnifrulas.web_tasks.board.BoardMemberService;
 import carobnifrulas.web_tasks.board.BoardRole;
+import carobnifrulas.web_tasks.card.CardRealtimeBus;
 import carobnifrulas.web_tasks.card.CardRepository;
 import carobnifrulas.web_tasks.card.activity.CardActivityService;
 import carobnifrulas.web_tasks.security.model.SecurityUtils;
-import carobnifrulas.web_tasks.board.BoardMemberService;
 import carobnifrulas.web_tasks.user.User;
 import carobnifrulas.web_tasks.user.UserRepository;
 import org.springframework.stereotype.Service;
@@ -47,7 +48,9 @@ public class CardCommentService {
         }
 
         BoardRole role = boardMemberService.getRole(card.getBoardId(), viewerUserId);
-        if (role == null) throw new SecurityException("Not a board member");
+        if (role == null) {
+            throw new SecurityException("Not a board member");
+        }
 
         return commentRepository.findRowsForCard(cardId);
     }
@@ -57,8 +60,12 @@ public class CardCommentService {
         User actor = requireUser(actorUserId);
 
         String trimmed = body == null ? "" : body.trim();
-        if (trimmed.isBlank()) throw new IllegalArgumentException("Comment body is empty");
-        if (trimmed.length() > 5000) throw new IllegalArgumentException("Comment too long (max 5000 chars)");
+        if (trimmed.isBlank()) {
+            throw new IllegalArgumentException("Comment body is empty");
+        }
+        if (trimmed.length() > 5000) {
+            throw new IllegalArgumentException("Comment too long (max 5000 chars)");
+        }
 
         var card = cardRepository.findById(cardId)
                 .orElseThrow(() -> new IllegalArgumentException("Card not found: " + cardId));
@@ -66,13 +73,16 @@ public class CardCommentService {
         if (!SecurityUtils.isGlobalAdmin(actor)) {
             BoardRole role = boardMemberService.getRole(card.getBoardId(), actorUserId);
             boolean canWrite = role != null && role != BoardRole.VIEWER;
-            if (!canWrite) throw new SecurityException("No permission to comment");
+            if (!canWrite) {
+                throw new SecurityException("No permission to comment");
+            }
         }
 
         commentRepository.save(new CardComment(cardId, actorUserId, trimmed, null));
 
-        // ✅ activity
         activityService.logComment(cardId, actorUserId, trimmed);
+
+        CardRealtimeBus.publish(cardId, CardRealtimeBus.ChangeType.ALL);
     }
 
     private User requireUser(Long userId) {

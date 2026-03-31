@@ -1,0 +1,65 @@
+﻿Computers connected to the internet are called clients and servers.
+https://developer.mozilla.org/en-US/docs/Learn_web_development/Getting_started/Web_standards/How_the_web_works
+------------------------
+https://www.harness.io/blog/software-development-life-cycle-phases
+7 faza
+------------------------
+https://silab.fon.bg.ac.rs/wp-content/uploads/2019/05/Craig-Walls-Spring-in-Action-Manning-Publications-2018.pdf
+spring anotacije i validacija
+---------------------------
+file:///C:/Users/milanaleksic/Downloads/Internet%20informacioni%20sistemi%20-%20Mihajlo%20Savi%C4%87%202024.pdf
+sve
+--------------------------------------------------------
+https://www.britannica.com/topic/information-system/Operational-support-and-enterprise-systems
+informacioni sis
+https://www.techtarget.com/whatis/definition/IS-information-system-or-information-services
+--------------------------------------------------
+book of vaadin
+--------------
+EXTENDING POSSIBILITIES OF DEVELOPERS
+IN LARGE BUSINESS APPLICATIONS
+BY INTEGRATING
+VAADIN FRAMEWORK
+
+Michał Szczygieł
+------------------------------
+RICH INTERNET APPLICATION
+DEVELOPMENT WITH THE
+VAADIN JAVA FRAMEWORK
+
+Aaron Pratt
+-------------------------
+https://learn.microsoft.com/en-us/azure/architecture/guide/architecture-styles/
+arhitektura
+---------------------
+https://learn.microsoft.com/en-us/dotnet/architecture/microservices/architect-microservice-container-applications/asynchronous-message-based-communication
+asinhrone poruke
+https://learn.microsoft.com/en-us/azure/architecture/patterns/async-request-reply
+----------------------
+https://martinfowler.com/eaaCatalog/
+paterni
+-------------------------
+Sigurnost web-aplikacija
+zagreb sveuciliste
+https://www.fer.unizg.hr/_download/repository/3.1._-_Arhitekture_-_WebArhitekture.pdf
+------------------
+https://cheatsheetseries.owasp.org/cheatsheets/Bean_Validation_Cheat_Sheet.html
+validacija i dosta stvari
+---------------------------
+https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Overview
+http
+
+
+
+
+
+------------------------------
+ako zafali izvora:
+AN EVALUATION OF HOW WEB FRAMEWORKS
+SUPPORT DEVELOPERS TO BUILD SECURE
+APPLICATIONS
+Kim Leppänen
+-----------------------
+
+
+
