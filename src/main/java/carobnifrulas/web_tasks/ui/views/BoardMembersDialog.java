@@ -4,14 +4,13 @@ import carobnifrulas.web_tasks.board.BoardMemberRepository;
 import carobnifrulas.web_tasks.board.BoardRole;
 import carobnifrulas.web_tasks.services.ServicesHolder;
 import carobnifrulas.web_tasks.user.User;
-
-import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.html.H4;
+import com.vaadin.flow.component.html.Paragraph;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.orderedlayout.FlexComponent;
@@ -36,18 +35,53 @@ public class BoardMembersDialog extends Dialog {
         this.services = services;
 
         setHeaderTitle("Members");
-        setWidth("820px");
+        setWidth("960px");
+        setMaxWidth("96vw");
+        setModal(true);
+        setDraggable(true);
+        setResizable(true);
 
-        add(buildTop());
-        add(buildGrid());
+        VerticalLayout root = new VerticalLayout(
+                buildIntroSection(),
+                buildTopSection(),
+                buildGridSection()
+        );
+        root.setPadding(false);
+        root.setSpacing(true);
+        root.setWidthFull();
+
+        add(root);
 
         refresh();
     }
 
-    private Component buildTop() {
+    private com.vaadin.flow.component.Component buildIntroSection() {
+        VerticalLayout wrap = new VerticalLayout();
+        wrap.setPadding(false);
+        wrap.setSpacing(false);
+        wrap.setWidthFull();
+        wrap.getStyle()
+                .set("border", "1px solid var(--lumo-contrast-10pct)")
+                .set("border-radius", "16px")
+                .set("padding", "16px")
+                .set("background", "linear-gradient(to right, var(--lumo-primary-color-10pct), white)");
+
+        H4 title = new H4("Upravljanje članovima boarda");
+        title.getStyle().set("margin", "0");
+
+        Paragraph subtitle = new Paragraph("Dodaj nove članove, promijeni njihove role ili ukloni pristup boardu.");
+        subtitle.getStyle()
+                .set("margin", "4px 0 0 0")
+                .set("color", "var(--lumo-secondary-text-color)");
+
+        wrap.add(title, subtitle);
+        return wrap;
+    }
+
+    private com.vaadin.flow.component.Component buildTopSection() {
         userBox = new ComboBox<>("Korisnik");
         userBox.setPlaceholder("Odaberi korisnika...");
-        userBox.setWidth("360px");
+        userBox.setWidth("420px");
         userBox.setClearButtonVisible(true);
         userBox.setItemLabelGenerator(u -> u.getFullName() + " (" + u.getEmail() + ")");
         userBox.setItems(services.boardMemberService.listUsersNotInBoard(boardId));
@@ -56,9 +90,9 @@ public class BoardMembersDialog extends Dialog {
         role.setLabel("Rola");
         role.setItems(BoardRole.ADMIN, BoardRole.MEMBER, BoardRole.VIEWER);
         role.setValue(BoardRole.MEMBER);
-        role.setWidth("180px");
+        role.setWidth("190px");
 
-        Button add = new Button("Dodaj", e -> {
+        Button add = new Button("Dodaj člana", e -> {
             try {
                 if (userBox.getValue() == null) {
                     Notification.show("Odaberi korisnika.");
@@ -75,7 +109,7 @@ public class BoardMembersDialog extends Dialog {
                 userBox.clear();
                 role.setValue(BoardRole.MEMBER);
                 refresh();
-                Notification.show("Dodato.");
+                Notification.show("Član je uspješno dodan.");
             } catch (Exception ex) {
                 Notification.show(ex.getMessage());
             }
@@ -85,76 +119,138 @@ public class BoardMembersDialog extends Dialog {
         HorizontalLayout row = new HorizontalLayout(userBox, role, add);
         row.setDefaultVerticalComponentAlignment(FlexComponent.Alignment.END);
         row.setWidthFull();
+        row.setSpacing(true);
 
         VerticalLayout wrap = new VerticalLayout(new H4("Dodaj člana"), row);
         wrap.setPadding(false);
         wrap.setSpacing(true);
+        wrap.setWidthFull();
+        wrap.getStyle()
+                .set("border", "1px solid var(--lumo-contrast-10pct)")
+                .set("border-radius", "16px")
+                .set("padding", "16px")
+                .set("background", "white")
+                .set("box-shadow", "0 2px 8px rgba(0,0,0,0.04)");
+
         return wrap;
     }
 
-    private Component buildGrid() {
+    private com.vaadin.flow.component.Component buildGridSection() {
         grid.setWidthFull();
 
         grid.addColumn(BoardMemberRepository.MemberRow::getEmail)
-                .setHeader("Email").setAutoWidth(true).setFlexGrow(1);
+                .setHeader("Email")
+                .setAutoWidth(true)
+                .setFlexGrow(1);
 
         grid.addColumn(BoardMemberRepository.MemberRow::getFullName)
-                .setHeader("Ime").setAutoWidth(true).setFlexGrow(1);
+                .setHeader("Ime")
+                .setAutoWidth(true)
+                .setFlexGrow(1);
 
-        grid.addColumn(BoardMemberRepository.MemberRow::getRole)
-                .setHeader("Rola").setAutoWidth(true);
+        grid.addComponentColumn(this::buildRoleBadge)
+                .setHeader("Rola")
+                .setAutoWidth(true)
+                .setFlexGrow(0);
 
         grid.addComponentColumn(r -> {
             BoardRole current = BoardRole.valueOf(r.getRole());
             if (current == BoardRole.OWNER) {
-                return new Span("—");
+                Span s = new Span("—");
+                s.getStyle().set("color", "var(--lumo-secondary-text-color)");
+                return s;
             }
 
             Select<BoardRole> sel = new Select<>();
             sel.setItems(BoardRole.ADMIN, BoardRole.MEMBER, BoardRole.VIEWER);
             sel.setValue(current);
+            sel.setWidth("170px");
+
             sel.addValueChangeListener(ev -> {
-                if (ev.getValue() == null) return;
+                if (ev.getValue() == null) {
+                    return;
+                }
+
                 try {
                     services.boardMemberService.changeRole(boardId, actorUserId, r.getUserId(), ev.getValue());
-                    Notification.show("Sačuvano.");
+                    Notification.show("Rola je sačuvana.");
                     refresh();
                 } catch (Exception ex) {
                     Notification.show(ex.getMessage());
                     refresh();
                 }
             });
+
             return sel;
         }).setHeader("Promijeni rolu").setAutoWidth(true);
 
         grid.addComponentColumn(r -> {
             BoardRole current = BoardRole.valueOf(r.getRole());
             if (current == BoardRole.OWNER) {
-                return new Span("");
+                Span s = new Span("");
+                return s;
             }
 
             Button remove = new Button("Ukloni", e -> {
                 try {
                     services.boardMemberService.removeMember(boardId, actorUserId, r.getUserId());
-                    Notification.show("Uklonjeno.");
+                    Notification.show("Član je uklonjen.");
                     refresh();
                 } catch (Exception ex) {
                     Notification.show(ex.getMessage());
                 }
             });
-            remove.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+            remove.addThemeVariants(ButtonVariant.LUMO_ERROR);
 
             return remove;
         }).setHeader("Ukloni").setAutoWidth(true);
 
-
-
         grid.setAllRowsVisible(true);
 
-        VerticalLayout wrap = new VerticalLayout(new H4("Članovi"), grid);
+        VerticalLayout wrap = new VerticalLayout(new H4("Članovi boarda"), grid);
         wrap.setPadding(false);
         wrap.setSpacing(true);
+        wrap.setWidthFull();
+        wrap.getStyle()
+                .set("border", "1px solid var(--lumo-contrast-10pct)")
+                .set("border-radius", "16px")
+                .set("padding", "16px")
+                .set("background", "white")
+                .set("box-shadow", "0 2px 8px rgba(0,0,0,0.04)");
+
         return wrap;
+    }
+
+    private com.vaadin.flow.component.Component buildRoleBadge(BoardMemberRepository.MemberRow row) {
+        String role = row.getRole() == null ? "—" : row.getRole();
+
+        Span badge = new Span(role);
+        badge.getStyle()
+                .set("font-size", "var(--lumo-font-size-s)")
+                .set("font-weight", "700")
+                .set("padding", "4px 10px")
+                .set("border-radius", "999px")
+                .set("border", "1px solid var(--lumo-contrast-10pct)");
+
+        switch (role) {
+            case "OWNER" -> badge.getStyle()
+                    .set("background", "var(--lumo-primary-color-10pct)")
+                    .set("color", "var(--lumo-primary-text-color)");
+            case "ADMIN" -> badge.getStyle()
+                    .set("background", "var(--lumo-warning-color-10pct)")
+                    .set("color", "var(--lumo-warning-text-color)");
+            case "MEMBER" -> badge.getStyle()
+                    .set("background", "var(--lumo-success-color-10pct)")
+                    .set("color", "var(--lumo-success-text-color)");
+            case "VIEWER" -> badge.getStyle()
+                    .set("background", "var(--lumo-contrast-10pct)")
+                    .set("color", "var(--lumo-secondary-text-color)");
+            default -> badge.getStyle()
+                    .set("background", "var(--lumo-contrast-5pct)")
+                    .set("color", "var(--lumo-secondary-text-color)");
+        }
+
+        return badge;
     }
 
     private void refresh() {

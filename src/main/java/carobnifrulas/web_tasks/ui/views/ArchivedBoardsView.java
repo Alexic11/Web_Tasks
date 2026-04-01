@@ -9,16 +9,20 @@ import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.confirmdialog.ConfirmDialog;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.html.H2;
+//import com.vaadin.flow.component.html.Icon;
+import com.vaadin.flow.component.html.Paragraph;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.orderedlayout.FlexComponent;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
+import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.data.value.ValueChangeMode;
 import com.vaadin.flow.dom.DomEventListener;
 import com.vaadin.flow.component.textfield.TextField;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
@@ -31,15 +35,16 @@ public class ArchivedBoardsView extends View implements MenuTab {
 
     private final Grid<Board> grid = new Grid<>(Board.class, false);
 
-    // ✅ cache (za live filtering bez DB na svako slovo)
     private List<Board> allBoards = List.of();
 
-    // ✅ state
     private final FilterState filterState = new FilterState();
 
+    private Span count;
+    private HorizontalLayout summaryRow;
+
     private static final class FilterState {
-        String nameQuery;     // search po nazivu
-        String archivedQuery; // search po datumu zatvaranja (formatirani string)
+        String nameQuery;
+        String archivedQuery;
 
         void reset() {
             nameQuery = "";
@@ -49,11 +54,69 @@ public class ArchivedBoardsView extends View implements MenuTab {
 
     @Override
     public void setElements() {
-        add(new H2("History"));
+        add(buildHeaderSection());
+
+        count = new Span();
+        count.getStyle()
+                .set("font-size", "var(--lumo-font-size-s)")
+                .set("color", "var(--lumo-secondary-text-color)")
+                .set("margin-left", "auto");
+
+        summaryRow = new HorizontalLayout();
+        summaryRow.setWidthFull();
+        summaryRow.setSpacing(true);
+        summaryRow.getStyle().set("margin-top", "6px");
+        add(summaryRow);
+
+        add(buildFilterBar());
 
         configureGrid();
 
-        // ===== FILTER BAR =====
+        VerticalLayout gridWrap = new VerticalLayout(grid);
+        gridWrap.setPadding(false);
+        gridWrap.setSpacing(false);
+        gridWrap.setWidthFull();
+        gridWrap.getStyle()
+                .set("border", "1px solid var(--lumo-contrast-10pct)")
+                .set("border-radius", "16px")
+                .set("padding", "12px")
+                .set("background", "white")
+                .set("box-shadow", "0 2px 8px rgba(0,0,0,0.04)");
+
+        add(gridWrap);
+
+        refreshAll();
+        applyFiltersAndRender();
+    }
+
+    private com.vaadin.flow.component.Component buildHeaderSection() {
+        VerticalLayout wrap = new VerticalLayout();
+        wrap.setPadding(false);
+        wrap.setSpacing(true);
+        wrap.setWidthFull();
+        wrap.getStyle()
+                .set("border", "1px solid var(--lumo-contrast-10pct)")
+                .set("border-radius", "18px")
+                .set("padding", "18px")
+                .set("background", "linear-gradient(to right, var(--lumo-contrast-5pct), white)");
+
+        H2 title = new H2("History");
+        title.getStyle().set("margin", "0");
+
+        Paragraph subtitle = new Paragraph("Pregled zatvorenih boardova i mogućnost njihovog ponovnog otvaranja.");
+        subtitle.getStyle()
+                .set("margin", "0")
+                .set("color", "var(--lumo-secondary-text-color)");
+
+        VerticalLayout left = new VerticalLayout(title, subtitle);
+        left.setPadding(false);
+        left.setSpacing(false);
+
+        wrap.add(left);
+        return wrap;
+    }
+
+    private com.vaadin.flow.component.Component buildFilterBar() {
         HorizontalLayout bar = new HorizontalLayout();
         bar.setWidthFull();
         bar.setDefaultVerticalComponentAlignment(FlexComponent.Alignment.END);
@@ -78,76 +141,38 @@ public class ArchivedBoardsView extends View implements MenuTab {
         Button reset = new Button("Reset");
         reset.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
 
-
-        Span count = new Span();
-        count.getStyle()
-                .set("font-size", "var(--lumo-font-size-s)")
-                .set("color", "var(--lumo-secondary-text-color)")
-                .set("margin-left", "auto");
-
         bar.add(nameSearch, archivedSearch, reset, count);
+        bar.setFlexGrow(1, nameSearch);
 
         bar.getStyle()
                 .set("border", "1px solid var(--lumo-contrast-10pct)")
-                .set("border-radius", "12px")
-                .set("padding", "10px")
-                .set("margin-top", "8px");
-
-        add(bar);
-
-        // ===== LOAD + APPLY FILTERS =====
-        refreshAll(); // napuni allBoards
-
-        Runnable applyFilters = () -> {
-            String nq = filterState.nameQuery == null ? "" : filterState.nameQuery.trim().toLowerCase();
-            String aq = filterState.archivedQuery == null ? "" : filterState.archivedQuery.trim().toLowerCase();
-
-            List<Board> filtered = new ArrayList<>();
-
-            for (Board b : allBoards) {
-                // name filter
-                if (!nq.isEmpty()) {
-                    String name = b.getName() == null ? "" : b.getName().toLowerCase();
-                    if (!name.contains(nq)) continue;
-                }
-
-                // archivedAt filter (formatirani string)
-                if (!aq.isEmpty()) {
-                    String arch = (b.getArchivedAt() == null) ? "—" : DT_FMT.format(b.getArchivedAt());
-                    if (!arch.toLowerCase().contains(aq)) continue;
-                }
-
-                filtered.add(b);
-            }
-
-            grid.setItems(filtered);
-            count.setText("Prikaz: " + filtered.size() + " / " + allBoards.size());
-        };
+                .set("border-radius", "14px")
+                .set("padding", "12px")
+                .set("margin-top", "8px")
+                .set("background", "white");
 
         nameSearch.addValueChangeListener(e -> {
             filterState.nameQuery = e.getValue();
-            applyFilters.run();
+            applyFiltersAndRender();
         });
 
         archivedSearch.addValueChangeListener(e -> {
             filterState.archivedQuery = e.getValue();
-            applyFilters.run();
+            applyFiltersAndRender();
         });
 
         reset.addClickListener(e -> {
             filterState.reset();
             nameSearch.setValue("");
             archivedSearch.setValue("");
-            applyFilters.run();
+            applyFiltersAndRender();
         });
 
-        // inicijalno
-        applyFilters.run();
-
-        add(grid);
+        return bar;
     }
 
     private void configureGrid() {
+        grid.removeAllColumns();
         grid.setWidthFull();
         grid.addClassName("boards-grid");
         grid.getStyle().set("cursor", "pointer");
@@ -157,16 +182,14 @@ public class ArchivedBoardsView extends View implements MenuTab {
                 .setAutoWidth(true)
                 .setFlexGrow(1);
 
-        grid.addColumn(b -> b.getArchivedAt() == null ? "—" : DT_FMT.format(b.getArchivedAt()))
+        grid.addComponentColumn(this::buildArchivedBadge)
                 .setHeader("Zatvoren")
                 .setAutoWidth(true)
                 .setFlexGrow(0);
 
-        // ✅ REOPEN (samo global admin ili OWNER)
         grid.addComponentColumn(b -> {
             Button reopen = new Button("Reopen", VaadinIcon.UNLOCK.create());
             reopen.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-
 
             boolean isGlobalAdmin = carobnifrulas.web_tasks.security.model.SecurityUtils.isGlobalAdmin(loggedUser);
 
@@ -189,7 +212,6 @@ public class ArchivedBoardsView extends View implements MenuTab {
                 cd.setHeader("Ponovo otvoriti board?");
                 cd.setText("Board će se vratiti iz History u aktivne boardove.");
                 cd.setCancelable(true);
-
                 cd.setConfirmText("Reopen");
                 cd.setConfirmButtonTheme("primary");
 
@@ -197,13 +219,8 @@ public class ArchivedBoardsView extends View implements MenuTab {
                     try {
                         services.boardService.reopenBoard(b.getId(), loggedUser.getId());
                         Notification.show("Board ponovo otvoren.");
-
-                        // refresh cache + grid (filteri ostaju)
                         refreshAll();
-                        // nakon refreshAll, setElements se ne zove ponovo, zato ručno re-apply:
-                        // najlakše: samo resetuje iteme pa filter bar radi dalje
-                        // (applyFilters je lokalni runnable u setElements; zato ovdje samo reload view)
-                        MainView.getMainView().setContent(this);
+                        applyFiltersAndRender();
                     } catch (Exception ex) {
                         Notification.show(ex.getMessage());
                     }
@@ -222,13 +239,123 @@ public class ArchivedBoardsView extends View implements MenuTab {
         grid.setAllRowsVisible(true);
     }
 
+    private com.vaadin.flow.component.Component buildArchivedBadge(Board b) {
+        String txt = b.getArchivedAt() == null ? "—" : DT_FMT.format(b.getArchivedAt());
+
+        Span badge = new Span(txt);
+        badge.getStyle()
+                .set("font-size", "var(--lumo-font-size-s)")
+                .set("font-weight", "600")
+                .set("padding", "4px 10px")
+                .set("border-radius", "999px")
+                .set("background", "var(--lumo-contrast-10pct)")
+                .set("color", "var(--lumo-secondary-text-color)");
+
+        return badge;
+    }
+
     private void refreshAll() {
         List<Board> boards = services.boardService.listArchivedBoardsFor(loggedUser);
         allBoards = (boards == null) ? List.of() : boards;
     }
 
-    // MenuTab
-    @Override public String getTabName() { return "History"; }
-    @Override public VaadinIcon getTabIcon() { return VaadinIcon.ARCHIVE; }
-    @Override public DomEventListener onTabClick() { return e -> MainView.getMainView().setContent(this); }
+    private void applyFiltersAndRender() {
+        String nq = filterState.nameQuery == null ? "" : filterState.nameQuery.trim().toLowerCase();
+        String aq = filterState.archivedQuery == null ? "" : filterState.archivedQuery.trim().toLowerCase();
+
+        List<Board> filtered = new ArrayList<>();
+
+        for (Board b : allBoards) {
+            if (!nq.isEmpty()) {
+                String name = b.getName() == null ? "" : b.getName().toLowerCase();
+                if (!name.contains(nq)) {
+                    continue;
+                }
+            }
+
+            if (!aq.isEmpty()) {
+                String arch = (b.getArchivedAt() == null) ? "—" : DT_FMT.format(b.getArchivedAt());
+                if (!arch.toLowerCase().contains(aq)) {
+                    continue;
+                }
+            }
+
+            filtered.add(b);
+        }
+
+        grid.setItems(filtered);
+        count.setText("Prikaz: " + filtered.size() + " / " + allBoards.size());
+        renderSummary(filtered);
+    }
+
+    private void renderSummary(List<Board> filtered) {
+        summaryRow.removeAll();
+
+        int total = filtered.size();
+        int archivedToday = 0;
+        int archivedThisWeek = 0;
+
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime weekAgo = now.minusDays(7);
+
+        for (Board b : filtered) {
+            if (b.getArchivedAt() != null) {
+                if (b.getArchivedAt().toLocalDate().equals(now.toLocalDate())) {
+                    archivedToday++;
+                }
+                if (b.getArchivedAt().isAfter(weekAgo)) {
+                    archivedThisWeek++;
+                }
+            }
+        }
+
+        summaryRow.add(
+                buildSummaryCard("Ukupno arhiviranih", String.valueOf(total), "var(--lumo-primary-color-10pct)"),
+                buildSummaryCard("Zatvoreni danas", String.valueOf(archivedToday), "var(--lumo-warning-color-10pct)"),
+                buildSummaryCard("Zatvoreni ove sedmice", String.valueOf(archivedThisWeek), "var(--lumo-contrast-10pct)")
+        );
+    }
+
+    private com.vaadin.flow.component.Component buildSummaryCard(String label, String value, String background) {
+        VerticalLayout card = new VerticalLayout();
+        card.setPadding(false);
+        card.setSpacing(false);
+        card.setWidth("240px");
+
+        card.getStyle()
+                .set("border", "1px solid var(--lumo-contrast-10pct)")
+                .set("border-radius", "14px")
+                .set("padding", "14px")
+                .set("background", background)
+                .set("box-sizing", "border-box");
+
+        Span valueSpan = new Span(value);
+        valueSpan.getStyle()
+                .set("font-size", "28px")
+                .set("font-weight", "700");
+
+        Span labelSpan = new Span(label);
+        labelSpan.getStyle()
+                .set("font-size", "var(--lumo-font-size-s)")
+                .set("color", "var(--lumo-secondary-text-color)")
+                .set("margin-top", "6px");
+
+        card.add(valueSpan, labelSpan);
+        return card;
+    }
+
+    @Override
+    public String getTabName() {
+        return "History";
+    }
+
+    @Override
+    public VaadinIcon getTabIcon() {
+        return VaadinIcon.ARCHIVE;
+    }
+
+    @Override
+    public DomEventListener onTabClick() {
+        return e -> MainView.getMainView().setContent(this);
+    }
 }

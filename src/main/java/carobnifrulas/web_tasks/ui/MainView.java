@@ -214,7 +214,7 @@ public class MainView extends AppLayout {
     private void openNotificationsDialog() {
         Dialog dialog = new Dialog();
         dialog.setHeaderTitle("Notifikacije");
-        dialog.setWidth("560px");
+        dialog.setWidth("620px");
         dialog.setMaxWidth("96vw");
 
         VerticalLayout body = new VerticalLayout();
@@ -231,7 +231,7 @@ public class MainView extends AppLayout {
             emptyState.setSpacing(false);
             emptyState.setDefaultHorizontalComponentAlignment(FlexComponent.Alignment.CENTER);
             emptyState.getStyle()
-                    .set("padding", "32px 12px")
+                    .set("padding", "36px 12px")
                     .set("color", "var(--lumo-secondary-text-color)");
 
             Icon bell = VaadinIcon.BELL.create();
@@ -254,7 +254,7 @@ public class MainView extends AppLayout {
 
             Scroller scroller = new Scroller(list);
             scroller.setWidthFull();
-            scroller.setHeight("420px");
+            scroller.setHeight("430px");
 
             body.add(scroller);
         }
@@ -268,11 +268,13 @@ public class MainView extends AppLayout {
         });
 
         Button closeBtn = new Button("Zatvori", e -> dialog.close());
+        closeBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
 
         HorizontalLayout footer = new HorizontalLayout(markAll, closeBtn);
         footer.setWidthFull();
         footer.setJustifyContentMode(FlexComponent.JustifyContentMode.BETWEEN);
         footer.setDefaultVerticalComponentAlignment(FlexComponent.Alignment.CENTER);
+        footer.getStyle().set("margin-top", "4px");
 
         VerticalLayout wrap = new VerticalLayout(body, footer);
         wrap.setPadding(false);
@@ -283,33 +285,24 @@ public class MainView extends AppLayout {
         dialog.open();
     }
 
-    private Button buildNotificationCard(Dialog parentDialog, NotificationEntity n) {
+    private com.vaadin.flow.component.Component buildNotificationCard(Dialog parentDialog, NotificationEntity n) {
         String when = n.getCreatedAt() == null
                 ? ""
                 : NOTIF_FMT.format(n.getCreatedAt().atZone(ZoneId.systemDefault()).toLocalDateTime());
 
-        H4 title = new H4(n.getTitle());
+        H4 title = new H4(n.getTitle() == null ? "" : n.getTitle());
         title.getStyle()
                 .set("margin", "0")
-                .set("font-size", "var(--lumo-font-size-m)");
-
-        Span message = new Span(n.getMessage() == null ? "" : n.getMessage());
-        message.getStyle()
-                .set("font-size", "var(--lumo-font-size-s)")
-                .set("color", "var(--lumo-secondary-text-color)")
-                .set("line-height", "1.35");
-
-        Span time = new Span(when);
-        time.getStyle()
-                .set("font-size", "var(--lumo-font-size-xs)")
-                .set("color", "var(--lumo-secondary-text-color)");
+                .set("font-size", "var(--lumo-font-size-m)")
+                .set("line-height", "1.25");
 
         Span status = new Span(n.isRead() ? "Pročitano" : "Novo");
         status.getStyle()
                 .set("font-size", "11px")
                 .set("font-weight", "700")
-                .set("padding", "2px 8px")
+                .set("padding", "3px 8px")
                 .set("border-radius", "999px")
+                .set("white-space", "nowrap")
                 .set("background", n.isRead()
                         ? "var(--lumo-contrast-10pct)"
                         : "var(--lumo-primary-color-10pct)")
@@ -319,29 +312,50 @@ public class MainView extends AppLayout {
 
         HorizontalLayout top = new HorizontalLayout(title, status);
         top.setWidthFull();
-        top.setJustifyContentMode(FlexComponent.JustifyContentMode.BETWEEN);
-        top.setDefaultVerticalComponentAlignment(FlexComponent.Alignment.CENTER);
+        top.setSpacing(true);
+        top.setDefaultVerticalComponentAlignment(FlexComponent.Alignment.START);
+        top.expand(title);
+
+        Span message = new Span(n.getMessage() == null ? "" : n.getMessage());
+        message.getStyle()
+                .set("font-size", "var(--lumo-font-size-s)")
+                .set("color", "var(--lumo-body-text-color)")
+                .set("line-height", "1.45")
+                .set("white-space", "normal")
+                .set("word-break", "break-word");
+
+        Span time = new Span(when);
+        time.getStyle()
+                .set("font-size", "var(--lumo-font-size-xs)")
+                .set("color", "var(--lumo-secondary-text-color)");
 
         VerticalLayout inner = new VerticalLayout(top, message, time);
         inner.setPadding(false);
         inner.setSpacing(true);
         inner.setWidthFull();
 
-        Button row = new Button(inner);
-        row.setWidthFull();
-        row.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
-        row.getStyle()
-                .set("text-align", "left")
-                .set("justify-content", "flex-start")
+        Div card = new Div(inner);
+        card.setWidthFull();
+        card.getStyle()
                 .set("padding", "14px 16px")
                 .set("border-radius", "14px")
                 .set("border", "1px solid var(--lumo-contrast-10pct)")
                 .set("background", n.isRead()
                         ? "white"
                         : "linear-gradient(to right, var(--lumo-primary-color-10pct), white)")
-                .set("box-shadow", "0 1px 4px rgba(0,0,0,0.04)");
+                .set("box-shadow", "0 1px 4px rgba(0,0,0,0.04)")
+                .set("box-sizing", "border-box")
+                .set("cursor", "pointer")
+                .set("transition", "all 0.2s ease");
 
-        row.addClickListener(e -> {
+        card.getElement().addEventListener("mouseenter", e ->
+                card.getStyle().set("box-shadow", "0 4px 12px rgba(0,0,0,0.08)")
+        );
+        card.getElement().addEventListener("mouseleave", e ->
+                card.getStyle().set("box-shadow", "0 1px 4px rgba(0,0,0,0.04)")
+        );
+
+        card.addClickListener(e -> {
             try {
                 servicesHolder.notificationService.markAsRead(n.getId(), loggedUser.getId());
                 refreshNotificationBadge();
@@ -352,7 +366,7 @@ public class MainView extends AppLayout {
             }
         });
 
-        return row;
+        return card;
     }
 
     public void openCardFromNotification(Long boardId, Long cardId) {

@@ -5,7 +5,6 @@ import carobnifrulas.web_tasks.board.BoardRole;
 import carobnifrulas.web_tasks.card.Card;
 import carobnifrulas.web_tasks.list.ListEntity;
 import carobnifrulas.web_tasks.ui.MainView;
-import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.checkbox.Checkbox;
@@ -20,14 +19,21 @@ import com.vaadin.flow.component.html.Paragraph;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.notification.Notification;
-import com.vaadin.flow.component.orderedlayout.*;
+import com.vaadin.flow.component.orderedlayout.FlexComponent;
+import com.vaadin.flow.component.orderedlayout.FlexLayout;
+import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
+import com.vaadin.flow.component.orderedlayout.Scroller;
+import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.select.Select;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.data.value.ValueChangeMode;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
@@ -35,14 +41,13 @@ public class BoardView extends View {
 
     private final Long boardId;
     private final AtomicLong draggedCardId = new AtomicLong(-1L);
-
     private final FilterState filterState;
 
     private static final class FilterState {
-        Long assigneeId;     // null = svi, -1 = unassigned, >0 = konkretan user
-        Integer priority;    // null = svi
+        Long assigneeId;
+        Integer priority;
         boolean overdueOnly;
-        String titleQuery;   // null/"" = sve
+        String titleQuery;
 
         FilterState copy() {
             FilterState c = new FilterState();
@@ -86,130 +91,43 @@ public class BoardView extends View {
                                 BoardMemberRepository.AssigneeRow::getUserId,
                                 r -> {
                                     String fn = r.getFullName() == null ? "" : r.getFullName().trim();
-                                    if (!fn.isBlank()) return fn + " (" + r.getEmail() + ")";
+                                    if (!fn.isBlank()) {
+                                        return fn + " (" + r.getEmail() + ")";
+                                    }
                                     return r.getEmail();
                                 }
                         ));
 
-        // ===== TOP BAR =====
-        HorizontalLayout top = new HorizontalLayout();
-        top.setWidthFull();
-        top.setDefaultVerticalComponentAlignment(FlexComponent.Alignment.CENTER);
-        top.setJustifyContentMode(FlexComponent.JustifyContentMode.BETWEEN);
-
-        HorizontalLayout left = new HorizontalLayout();
-        left.setDefaultVerticalComponentAlignment(FlexComponent.Alignment.CENTER);
-
-        Button back = new Button("Nazad",
-                e -> MainView.getMainView().setContent(services.menu.getDefaultView()));
-        back.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-
-        back.setIcon(VaadinIcon.ARROW_LEFT.create());
-
-        H2 title = new H2(board.getName());
-        left.add(back, title);
-
-        HorizontalLayout right = new HorizontalLayout();
-        right.setDefaultVerticalComponentAlignment(FlexComponent.Alignment.CENTER);
-
-        Span roleBadge = new Span(myRole.name());
-        roleBadge.getStyle()
-                .set("padding", "4px 10px")
-                .set("border-radius", "999px")
-                .set("border", "1px solid var(--lumo-contrast-20pct)")
-                .set("font-size", "var(--lumo-font-size-s)");
-
-        if (archived) {
-            Span archivedBadge = new Span("ARCHIVED");
-            archivedBadge.getStyle()
-                    .set("padding", "4px 10px")
-                    .set("border-radius", "999px")
-                    .set("background", "var(--lumo-contrast-10pct)")
-                    .set("font-size", "var(--lumo-font-size-s)");
-            right.add(archivedBadge);
-        }
-
-        Button membersBtn = new Button("Members",
-                VaadinIcon.USERS.create(),
-                e -> new BoardMembersDialog(boardId, loggedUser.getId(), services).open());
-        membersBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-
-        membersBtn.setVisible(canManageMembers && !archived);
-
-        Button closeBoard = new Button("Zatvori", VaadinIcon.LOCK.create());
-        closeBoard.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-
-        closeBoard.addClickListener(e -> {
-            long openCnt;
-            try {
-                openCnt = services.cardService.countOpenTasks(boardId);
-            } catch (Exception ex) {
-                Notification.show(ex.getMessage());
-                return;
-            }
-
-            if (openCnt > 0) {
-                ConfirmDialog info = new ConfirmDialog();
-                info.setHeader("Ne možeš zatvoriti board");
-                info.setText("Board '" + board.getName() + "' ima još otvorenih taskova: " + openCnt +
-                        ". Premjesti sve taskove u Done pa pokušaj ponovo.");
-                info.setConfirmText("OK");
-                info.setConfirmButtonTheme("primary");
-                info.setCancelable(false);
-                info.open();
-                return;
-            }
-
-            ConfirmDialog cd = new ConfirmDialog();
-            cd.setHeader("Zatvori board?");
-            cd.setText("Jesi li siguran da želiš zatvoriti board '" + board.getName() + "' ? Board će preći u History.");
-            cd.setCancelable(true);
-
-            cd.setConfirmText("Zatvori");
-            cd.setConfirmButtonTheme("error primary");
-
-            cd.addConfirmListener(ev -> {
-                try {
-                    services.boardService.archiveBoard(boardId, loggedUser.getId());
-                    Notification.show("Board '" + board.getName() + "' je zatvoren.");
-                    MainView.getMainView().setContent(new BoardsView());
-                } catch (Exception ex) {
-                    Notification.show(ex.getMessage());
-                }
-            });
-
-            cd.open();
-        });
-
-        closeBoard.setVisible(canArchive);
-
-        right.add(roleBadge, membersBtn, closeBoard);
-        top.add(left, right);
-        add(top);
+        add(buildHeaderSection(board.getName(), myRole, archived, canManageMembers, canArchive));
 
         if (archived) {
             Paragraph p = new Paragraph("Ovaj board je zatvoren (History režim) — samo pregled.");
-            p.getStyle().set("color", "var(--lumo-secondary-text-color)");
+            p.getStyle()
+                    .set("color", "var(--lumo-secondary-text-color)")
+                    .set("margin", "0");
             add(p);
         } else if (!canWrite) {
             Paragraph p = new Paragraph("VIEWER režim: možeš samo pregledati board.");
-            p.getStyle().set("color", "var(--lumo-secondary-text-color)");
+            p.getStyle()
+                    .set("color", "var(--lumo-secondary-text-color)")
+                    .set("margin", "0");
             add(p);
         }
 
-        // ===== COLUMNS UI =====
-        HorizontalLayout columns = new HorizontalLayout();
+        FlexLayout columns = new FlexLayout();
         columns.setWidthFull();
-        columns.setSpacing(true);
+        columns.setFlexWrap(FlexLayout.FlexWrap.NOWRAP);
+        columns.getStyle()
+                .set("display", "flex")
+                .set("gap", "16px")
+                .set("align-items", "flex-start");
 
-        // span za count koji ćemo update-ovati bez rebuild-a view-a
         Span count = new Span();
         count.getStyle()
                 .set("font-size", "var(--lumo-font-size-s)")
                 .set("color", "var(--lumo-secondary-text-color)")
                 .set("margin-left", "auto");
 
-        // refresh kolona (i count-a) bez MainView.setContent(...)
         Runnable refreshColumns = () -> {
             try {
                 columns.removeAll();
@@ -227,7 +145,9 @@ public class BoardView extends View {
                 for (int i = 0; i < lists.size(); i++) {
                     Long listId = lists.get(i).getId();
                     for (Card c : cardsByList.getOrDefault(listId, List.of())) {
-                        if (matchesFilters(c, i, lists.size())) matchCount++;
+                        if (matchesFilters(c, i, lists.size())) {
+                            matchCount++;
+                        }
                     }
                 }
 
@@ -242,53 +162,207 @@ public class BoardView extends View {
             }
         };
 
-        // ===== FILTER BAR =====
-        Component filterBar = buildFilterBar(assigneeLabel, count, refreshColumns);
-        add(filterBar);
+        add(buildFilterBar(assigneeLabel, count, refreshColumns));
 
-        // inicijalno punjenje
         refreshColumns.run();
 
-        add(columns);
+        Scroller scroller = new Scroller(columns);
+        scroller.setWidthFull();
+        scroller.setScrollDirection(Scroller.ScrollDirection.HORIZONTAL);
+        scroller.getStyle().set("padding-bottom", "12px");
+
+        add(scroller);
     }
 
-    private Component buildColumn(ListEntity list,
-                                  List<ListEntity> allLists,
-                                  int idx,
-                                  boolean canWrite,
-                                  Map<Long, String> assigneeLabel,
-                                  Map<Long, List<Card>> cardsByList) {
+    private com.vaadin.flow.component.Component buildHeaderSection(String boardName,
+                                                                   BoardRole myRole,
+                                                                   boolean archived,
+                                                                   boolean canManageMembers,
+                                                                   boolean canArchive) {
+        VerticalLayout wrap = new VerticalLayout();
+        wrap.setPadding(false);
+        wrap.setSpacing(true);
+        wrap.setWidthFull();
+        wrap.getStyle()
+                .set("border", "1px solid var(--lumo-contrast-10pct)")
+                .set("border-radius", "18px")
+                .set("padding", "18px")
+                .set("background", "linear-gradient(to right, var(--lumo-primary-color-10pct), white)");
+
+        Button back = new Button("Nazad",
+                e -> MainView.getMainView().setContent(services.menu.getDefaultView()));
+        back.setIcon(VaadinIcon.ARROW_LEFT.create());
+        back.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
+        H2 title = new H2(boardName);
+        title.getStyle().set("margin", "0");
+
+        Paragraph subtitle = new Paragraph("Pregled boarda, taskova i timske saradnje.");
+        subtitle.getStyle()
+                .set("margin", "0")
+                .set("color", "var(--lumo-secondary-text-color)");
+
+        VerticalLayout leftText = new VerticalLayout(title, subtitle);
+        leftText.setPadding(false);
+        leftText.setSpacing(false);
+
+        HorizontalLayout left = new HorizontalLayout(back, leftText);
+        left.setDefaultVerticalComponentAlignment(FlexComponent.Alignment.CENTER);
+        left.setSpacing(true);
+
+        Span roleBadge = buildRoleBadge(myRole.name());
+
+        HorizontalLayout right = new HorizontalLayout();
+        right.setSpacing(true);
+        right.setDefaultVerticalComponentAlignment(FlexComponent.Alignment.CENTER);
+
+        if (archived) {
+            Span archivedBadge = new Span("ARCHIVED");
+            archivedBadge.getStyle()
+                    .set("padding", "4px 10px")
+                    .set("border-radius", "999px")
+                    .set("background", "var(--lumo-contrast-10pct)")
+                    .set("font-size", "var(--lumo-font-size-s)")
+                    .set("font-weight", "700");
+            right.add(archivedBadge);
+        }
+
+        Button membersBtn = new Button("Members",
+                VaadinIcon.USERS.create(),
+                e -> new BoardMembersDialog(boardId, loggedUser.getId(), services).open());
+        membersBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+        membersBtn.setVisible(canManageMembers && !archived);
+
+        Button closeBoard = new Button("Zatvori", VaadinIcon.LOCK.create());
+        closeBoard.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+        closeBoard.setVisible(canArchive);
+
+        closeBoard.addClickListener(e -> {
+            long openCnt;
+            try {
+                openCnt = services.cardService.countOpenTasks(boardId);
+            } catch (Exception ex) {
+                Notification.show(ex.getMessage());
+                return;
+            }
+
+            if (openCnt > 0) {
+                ConfirmDialog info = new ConfirmDialog();
+                info.setHeader("Ne možeš zatvoriti board");
+                info.setText("Board '" + boardName + "' ima još otvorenih taskova: " + openCnt +
+                        ". Premjesti sve taskove u Done pa pokušaj ponovo.");
+                info.setConfirmText("OK");
+                info.setConfirmButtonTheme("primary");
+                info.setCancelable(false);
+                info.open();
+                return;
+            }
+
+            ConfirmDialog cd = new ConfirmDialog();
+            cd.setHeader("Zatvori board?");
+            cd.setText("Jesi li siguran da želiš zatvoriti board '" + boardName + "' ? Board će preći u History.");
+            cd.setCancelable(true);
+            cd.setConfirmText("Zatvori");
+            cd.setConfirmButtonTheme("error primary");
+
+            cd.addConfirmListener(ev -> {
+                try {
+                    services.boardService.archiveBoard(boardId, loggedUser.getId());
+                    Notification.show("Board '" + boardName + "' je zatvoren.");
+                    MainView.getMainView().setContent(new BoardsView());
+                } catch (Exception ex) {
+                    Notification.show(ex.getMessage());
+                }
+            });
+
+            cd.open();
+        });
+
+        right.add(roleBadge, membersBtn, closeBoard);
+
+        HorizontalLayout top = new HorizontalLayout(left, right);
+        top.setWidthFull();
+        top.setJustifyContentMode(FlexComponent.JustifyContentMode.BETWEEN);
+        top.setDefaultVerticalComponentAlignment(FlexComponent.Alignment.CENTER);
+
+        wrap.add(top);
+        return wrap;
+    }
+
+    private com.vaadin.flow.component.Component buildColumn(ListEntity list,
+                                                            List<ListEntity> allLists,
+                                                            int idx,
+                                                            boolean canWrite,
+                                                            Map<Long, String> assigneeLabel,
+                                                            Map<Long, List<Card>> cardsByList) {
 
         VerticalLayout col = new VerticalLayout();
-        col.setPadding(true);
+        col.setPadding(false);
         col.setSpacing(true);
+        col.setWidth("100%");
         col.getStyle()
-                .set("border", "1px solid var(--lumo-contrast-20pct)")
-                .set("border-radius", "12px")
-                .set("min-width", "340px");
-
-        HorizontalLayout header = new HorizontalLayout();
-        header.setWidthFull();
-        header.setJustifyContentMode(FlexComponent.JustifyContentMode.BETWEEN);
+                .set("flex", "1 1 360px")
+                .set("border", "1px solid var(--lumo-contrast-10pct)")
+                .set("border-radius", "16px")
+                .set("padding", "14px")
+                .set("padding-bottom", "100px")
+                .set("background", "white")
+                .set("box-shadow", "0 2px 8px rgba(0,0,0,0.04)")
+                .set("min-width", "320px")
+                .set("box-sizing", "border-box")
+                .set("transition", "all 0.2s ease");
 
         H3 h = new H3(list.getTitle());
+        h.getStyle().set("margin", "0");
+
+        List<Card> listCards = cardsByList.getOrDefault(list.getId(), List.of());
+        long visibleCount = listCards.stream()
+                .filter(c -> matchesFilters(c, idx, allLists.size()))
+                .count();
+
+        Span listCount = new Span(String.valueOf(visibleCount));
+        listCount.getStyle()
+                .set("padding", "4px 10px")
+                .set("border-radius", "999px")
+                .set("background", "var(--lumo-contrast-10pct)")
+                .set("font-size", "var(--lumo-font-size-s)")
+                .set("font-weight", "700");
+
+        HorizontalLayout leftHeader = new HorizontalLayout(h, listCount);
+        leftHeader.setDefaultVerticalComponentAlignment(FlexComponent.Alignment.CENTER);
+        leftHeader.setSpacing(true);
 
         Button addTask = new Button("+ Novi task",
                 e -> TaskDialog.create(services, boardId, list.getId(), loggedUser.getId()).open());
         addTask.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-
         addTask.setVisible(canWrite);
 
-        header.add(h, addTask);
+        HorizontalLayout header = new HorizontalLayout(leftHeader, addTask);
+        header.setWidthFull();
+        header.setJustifyContentMode(FlexComponent.JustifyContentMode.BETWEEN);
+        header.setDefaultVerticalComponentAlignment(FlexComponent.Alignment.CENTER);
+
         col.add(header);
 
-        // Drop na samu listu => ide na kraj liste (samo ako može pisati)
         if (canWrite) {
             DropTarget<VerticalLayout> dropOnList = DropTarget.create(col);
             dropOnList.setDropEffect(DropEffect.MOVE);
+
+            col.getElement().addEventListener("dragenter", e ->
+                    col.getStyle().set("background", "var(--lumo-primary-color-10pct)")
+            );
+
+            col.getElement().addEventListener("dragleave", e ->
+                    col.getStyle().set("background", "white")
+            );
+
             dropOnList.addDropListener(e -> {
+                col.getStyle().set("background", "white");
+
                 Long movingId = draggedCardId.get();
-                if (movingId == null || movingId <= 0) return;
+                if (movingId == null || movingId <= 0) {
+                    return;
+                }
 
                 try {
                     int endIndex = services.cardService.findByList(list.getId()).size();
@@ -302,41 +376,55 @@ public class BoardView extends View {
 
         List<Card> cards = cardsByList.getOrDefault(list.getId(), List.of());
         for (Card c : cards) {
-            if (!matchesFilters(c, idx, allLists.size())) continue;
+            if (!matchesFilters(c, idx, allLists.size())) {
+                continue;
+            }
             col.add(renderCard(c, list.getId(), allLists, idx, canWrite, assigneeLabel));
         }
 
         return col;
     }
 
-    private Component renderCard(Card c,
-                                 Long columnListId,
-                                 List<ListEntity> allLists,
-                                 int idx,
-                                 boolean canWrite,
-                                 Map<Long, String> assigneeLabel) {
+    private com.vaadin.flow.component.Component renderCard(Card c,
+                                                           Long columnListId,
+                                                           List<ListEntity> allLists,
+                                                           int idx,
+                                                           boolean canWrite,
+                                                           Map<Long, String> assigneeLabel) {
 
         VerticalLayout box = new VerticalLayout();
-        box.setPadding(true);
-        box.setSpacing(false);
+        box.setPadding(false);
+        box.setSpacing(true);
         box.getStyle()
                 .set("cursor", canWrite ? "grab" : "pointer")
-                .set("border", "1px solid var(--lumo-contrast-20pct)")
-                .set("border-radius", "12px");
+                .set("border", "1px solid var(--lumo-contrast-10pct)")
+                .set("border-radius", "14px")
+                .set("padding", "14px")
+                .set("background", "white")
+                .set("box-shadow", "0 1px 4px rgba(0,0,0,0.04)")
+                .set("transition", "all 0.2s ease");
+
+        if (c.getDueAt() != null && c.getDueAt().isBefore(LocalDateTime.now())) {
+            box.getStyle().set("background", "linear-gradient(to bottom right, var(--lumo-error-color-10pct), white)");
+        }
 
         if (canWrite) {
-            DragSource<Component> drag = DragSource.create(box);
+            DragSource<com.vaadin.flow.component.Component> drag = DragSource.create(box);
             drag.setDragData(c.getId());
             drag.setEffectAllowed(EffectAllowed.MOVE);
             drag.addDragStartListener(e -> draggedCardId.set(c.getId()));
             drag.addDragEndListener(e -> draggedCardId.set(-1L));
 
-            DropTarget<Component> drop = DropTarget.create(box);
+            DropTarget<com.vaadin.flow.component.Component> drop = DropTarget.create(box);
             drop.setDropEffect(DropEffect.MOVE);
             drop.addDropListener(e -> {
                 Long movingId = draggedCardId.get();
-                if (movingId == null || movingId <= 0) return;
-                if (movingId.equals(c.getId())) return;
+                if (movingId == null || movingId <= 0) {
+                    return;
+                }
+                if (movingId.equals(c.getId())) {
+                    return;
+                }
 
                 try {
                     List<Card> inList = services.cardService.findByList(columnListId);
@@ -359,7 +447,9 @@ public class BoardView extends View {
         box.addClickListener(ev -> TaskDialog.edit(services, c, loggedUser.getId()).open());
 
         Span title = new Span(c.getTitle());
-        title.getStyle().set("font-weight", "700");
+        title.getStyle()
+                .set("font-weight", "700")
+                .set("font-size", "var(--lumo-font-size-m)");
 
         String assignedTxt = "-";
         if (c.getAssignedTo() != null) {
@@ -376,6 +466,7 @@ public class BoardView extends View {
 
         HorizontalLayout meta = new HorizontalLayout(priority, due);
         meta.setSpacing(true);
+        meta.setDefaultVerticalComponentAlignment(FlexComponent.Alignment.CENTER);
 
         HorizontalLayout actions = new HorizontalLayout();
         actions.setSpacing(true);
@@ -385,18 +476,22 @@ public class BoardView extends View {
             services.cardService.assignToMe(c.getId(), loggedUser.getId());
             MainView.getMainView().setContent(new BoardView(boardId, filterState.copy()));
         });
+        take.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
 
         Button release = new Button("Pusti", e -> {
             services.cardService.unassign(c.getId(), loggedUser.getId());
             MainView.getMainView().setContent(new BoardView(boardId, filterState.copy()));
         });
+        release.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
 
         boolean iAmAssignee = c.getAssignedTo() != null && c.getAssignedTo().equals(loggedUser.getId());
         take.setEnabled(c.getAssignedTo() == null);
         release.setEnabled(iAmAssignee);
 
         Button left = new Button(VaadinIcon.ARROW_LEFT.create(), e -> {
-            if (idx == 0) return;
+            if (idx == 0) {
+                return;
+            }
 
             try {
                 services.cardService.moveToList(
@@ -411,7 +506,9 @@ public class BoardView extends View {
         });
 
         Button right = new Button(VaadinIcon.ARROW_RIGHT.create(), e -> {
-            if (idx >= allLists.size() - 1) return;
+            if (idx >= allLists.size() - 1) {
+                return;
+            }
 
             try {
                 services.cardService.moveToList(
@@ -427,6 +524,8 @@ public class BoardView extends View {
 
         left.setEnabled(idx > 0);
         right.setEnabled(idx < allLists.size() - 1);
+        left.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+        right.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
 
         actions.add(take, release, left, right);
 
@@ -456,7 +555,8 @@ public class BoardView extends View {
                     .set("background", "var(--lumo-primary-color-10pct)")
                     .set("color", "var(--lumo-primary-text-color)");
             case 2 -> s.getStyle()
-                    .set("background", "var(--lumo-contrast-5pct)");
+                    .set("background", "var(--lumo-contrast-5pct)")
+                    .set("color", "var(--lumo-body-text-color)");
             default -> s.getStyle()
                     .set("color", "var(--lumo-secondary-text-color)");
         }
@@ -470,12 +570,17 @@ public class BoardView extends View {
                 : "Rok: " + DT_FMT.format(dueAt);
 
         Span due = new Span(dueTxt);
-        due.getStyle().set("font-size", "var(--lumo-font-size-s)");
+        due.getStyle()
+                .set("font-size", "var(--lumo-font-size-s)")
+                .set("padding", "2px 10px")
+                .set("border-radius", "999px")
+                .set("background", "var(--lumo-contrast-5pct)");
 
         if (dueAt != null && dueAt.isBefore(LocalDateTime.now())) {
             due.getStyle()
                     .set("color", "var(--lumo-error-text-color)")
-                    .set("font-weight", "600");
+                    .set("font-weight", "700")
+                    .set("background", "var(--lumo-error-color-10pct)");
         } else {
             due.getStyle()
                     .set("color", "var(--lumo-secondary-text-color)");
@@ -484,14 +589,14 @@ public class BoardView extends View {
         return due;
     }
 
-    // ✅ FIX: reset mora vratiti i UI kontrole na default (ne samo filterState)
-    private Component buildFilterBar(Map<Long, String> assigneeLabel, Span count, Runnable refreshColumns) {
+    private com.vaadin.flow.component.Component buildFilterBar(Map<Long, String> assigneeLabel,
+                                                               Span count,
+                                                               Runnable refreshColumns) {
         HorizontalLayout bar = new HorizontalLayout();
         bar.setWidthFull();
         bar.setDefaultVerticalComponentAlignment(FlexComponent.Alignment.END);
         bar.setSpacing(true);
 
-        // --- Assignee filter ---
         Select<Long> assignee = new Select<>();
         assignee.setLabel("Assignee");
         assignee.setWidth("320px");
@@ -499,7 +604,7 @@ public class BoardView extends View {
         assignee.setEmptySelectionCaption("Svi");
 
         List<Long> assItems = new ArrayList<>();
-        assItems.add(-1L); // unassigned
+        assItems.add(-1L);
         assItems.addAll(assigneeLabel.keySet());
         assignee.setItems(assItems);
 
@@ -510,13 +615,11 @@ public class BoardView extends View {
         });
 
         assignee.setValue(filterState.assigneeId);
-
         assignee.addValueChangeListener(e -> {
             filterState.assigneeId = e.getValue();
             refreshColumns.run();
         });
 
-        // --- Priority filter ---
         Select<Integer> pr = new Select<>();
         pr.setLabel("Prioritet");
         pr.setWidth("200px");
@@ -531,7 +634,6 @@ public class BoardView extends View {
             refreshColumns.run();
         });
 
-        // --- Overdue only ---
         Checkbox overdue = new Checkbox("Overdue");
         overdue.setValue(filterState.overdueOnly);
         overdue.addValueChangeListener(e -> {
@@ -539,13 +641,11 @@ public class BoardView extends View {
             refreshColumns.run();
         });
 
-        // --- Search title ---
         TextField search = new TextField();
         search.setLabel("Search title");
         search.setWidthFull();
         search.setClearButtonVisible(true);
         search.setValue(filterState.titleQuery == null ? "" : filterState.titleQuery);
-
         search.setValueChangeMode(ValueChangeMode.TIMEOUT);
         search.setValueChangeTimeout(300);
 
@@ -554,21 +654,17 @@ public class BoardView extends View {
             refreshColumns.run();
         });
 
-        // --- Reset button (state + UI) ---
         Button reset = new Button("Reset", e -> {
-            // 1) reset state
             filterState.assigneeId = null;
             filterState.priority = null;
             filterState.overdueOnly = false;
             filterState.titleQuery = "";
 
-            // 2) reset UI controls (ovo ti je falilo)
-            assignee.clear();          // vrati na "Svi"
-            pr.clear();                // vrati na "Svi"
-            overdue.setValue(false);   // odčekiraj
-            search.clear();            // isprazni
+            assignee.clear();
+            pr.clear();
+            overdue.setValue(false);
+            search.clear();
 
-            // 3) refresh
             refreshColumns.run();
         });
         reset.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
@@ -578,15 +674,15 @@ public class BoardView extends View {
 
         bar.getStyle()
                 .set("border", "1px solid var(--lumo-contrast-10pct)")
-                .set("border-radius", "12px")
-                .set("padding", "10px")
-                .set("margin-top", "8px");
+                .set("border-radius", "14px")
+                .set("padding", "12px")
+                .set("margin-top", "8px")
+                .set("background", "white");
 
         return bar;
     }
 
     private boolean matchesFilters(Card c, int listIdx, int totalLists) {
-        // assignee
         if (filterState.assigneeId != null) {
             if (filterState.assigneeId == -1L) {
                 if (c.getAssignedTo() != null) return false;
@@ -595,22 +691,17 @@ public class BoardView extends View {
             }
         }
 
-        // priority
         if (filterState.priority != null) {
             int p = c.getPriority() == null ? 1 : c.getPriority();
             if (!filterState.priority.equals(p)) return false;
         }
 
-        // overdue
         if (filterState.overdueOnly) {
             if (c.getDueAt() == null) return false;
             if (!c.getDueAt().isBefore(LocalDateTime.now())) return false;
-
-            // sakrij overdue u zadnjoj listi (Done)
             if (listIdx == totalLists - 1) return false;
         }
 
-        // search by title
         String q = filterState.titleQuery == null ? "" : filterState.titleQuery.trim();
         if (!q.isEmpty()) {
             String t = c.getTitle() == null ? "" : c.getTitle();
@@ -618,5 +709,35 @@ public class BoardView extends View {
         }
 
         return true;
+    }
+
+    private Span buildRoleBadge(String role) {
+        Span badge = new Span(role);
+        badge.getStyle()
+                .set("padding", "4px 10px")
+                .set("border-radius", "999px")
+                .set("font-size", "var(--lumo-font-size-s)")
+                .set("font-weight", "700")
+                .set("border", "1px solid var(--lumo-contrast-10pct)");
+
+        switch (role) {
+            case "OWNER" -> badge.getStyle()
+                    .set("background", "var(--lumo-primary-color-10pct)")
+                    .set("color", "var(--lumo-primary-text-color)");
+            case "ADMIN" -> badge.getStyle()
+                    .set("background", "var(--lumo-warning-color-10pct)")
+                    .set("color", "var(--lumo-warning-text-color)");
+            case "MEMBER" -> badge.getStyle()
+                    .set("background", "var(--lumo-success-color-10pct)")
+                    .set("color", "var(--lumo-success-text-color)");
+            case "VIEWER" -> badge.getStyle()
+                    .set("background", "var(--lumo-contrast-10pct)")
+                    .set("color", "var(--lumo-secondary-text-color)");
+            default -> badge.getStyle()
+                    .set("background", "var(--lumo-contrast-5pct)")
+                    .set("color", "var(--lumo-secondary-text-color)");
+        }
+
+        return badge;
     }
 }

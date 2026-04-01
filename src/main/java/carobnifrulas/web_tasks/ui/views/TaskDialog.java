@@ -19,6 +19,7 @@ import com.vaadin.flow.component.html.Anchor;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.H3;
 import com.vaadin.flow.component.html.H4;
+import com.vaadin.flow.component.html.Paragraph;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.messages.MessageInput;
 import com.vaadin.flow.component.messages.MessageList;
@@ -27,6 +28,7 @@ import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.orderedlayout.FlexComponent.Alignment;
 import com.vaadin.flow.component.orderedlayout.FlexComponent.JustifyContentMode;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
+import com.vaadin.flow.component.orderedlayout.Scroller;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.select.Select;
 import com.vaadin.flow.component.textfield.TextArea;
@@ -88,8 +90,9 @@ public class TaskDialog extends Dialog {
         boolean canWrite = myRole != BoardRole.VIEWER;
 
         setHeaderTitle(isEdit ? "Uredi task" : "Novi task");
-        setWidth("980px");
-        setHeight("720px");
+        setWidth("1040px");
+        setMaxWidth("96vw");
+        setHeight("780px");
         setDraggable(true);
         setResizable(true);
 
@@ -100,6 +103,7 @@ public class TaskDialog extends Dialog {
         desc.setWidthFull();
         desc.setMinHeight("220px");
         desc.setMaxHeight("320px");
+        desc.setPlaceholder("Unesi opis taska...");
 
         DateTimePicker due = new DateTimePicker("Rok (opciono)");
         due.setWidth("280px");
@@ -159,7 +163,7 @@ public class TaskDialog extends Dialog {
         save.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
 
         Button cancel = new Button("Otkaži", e -> close());
-        cancel.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+        cancel.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
 
         save.setEnabled(canWrite);
 
@@ -201,13 +205,15 @@ public class TaskDialog extends Dialog {
         });
 
         HorizontalLayout actions = new HorizontalLayout(save, cancel);
+        actions.setSpacing(true);
 
         HorizontalLayout row2 = new HorizontalLayout(due, priority, assignedTo);
         row2.setWidthFull();
         row2.setFlexGrow(1, assignedTo);
 
         VerticalLayout detailsCard = new VerticalLayout(
-                new H4(isEdit ? "Detalji" : "Kreiranje"),
+                buildSectionHeader(isEdit ? "Detalji taska" : "Kreiranje taska",
+                        isEdit ? "Pregled i izmjena osnovnih informacija." : "Unesi osnovne informacije za novi task."),
                 title,
                 desc,
                 row2,
@@ -237,9 +243,30 @@ public class TaskDialog extends Dialog {
         root.setSpacing(true);
         root.setWidthFull();
 
-        add(root);
+        Scroller scroller = new Scroller(root);
+        scroller.setWidthFull();
+        scroller.setHeightFull();
+
+        add(scroller);
 
         registerRealtime(existing.getId());
+    }
+
+    private com.vaadin.flow.component.Component buildSectionHeader(String title, String subtitle) {
+        VerticalLayout wrap = new VerticalLayout();
+        wrap.setPadding(false);
+        wrap.setSpacing(false);
+
+        H4 h = new H4(title);
+        h.getStyle().set("margin", "0");
+
+        Paragraph p = new Paragraph(subtitle);
+        p.getStyle()
+                .set("margin", "4px 0 0 0")
+                .set("color", "var(--lumo-secondary-text-color)");
+
+        wrap.add(h, p);
+        return wrap;
     }
 
     private void registerRealtime(Long cardId) {
@@ -301,7 +328,10 @@ public class TaskDialog extends Dialog {
 
         refreshActivitySection();
 
-        VerticalLayout wrap = new VerticalLayout(new H4("Activity"), activityGrid);
+        VerticalLayout wrap = new VerticalLayout(
+                buildSectionHeader("Activity", "Istorija izmjena i aktivnosti nad taskom."),
+                activityGrid
+        );
         wrap.setPadding(false);
         wrap.setSpacing(true);
         wrap.setWidthFull();
@@ -324,24 +354,23 @@ public class TaskDialog extends Dialog {
         root.setSpacing(true);
         root.setWidthFull();
 
-        H3 title = new H3("Komentari");
-        title.getStyle().set("margin", "0");
-
         commentsList = new MessageList();
         commentsList.setWidthFull();
         commentsList.getStyle()
-                .set("max-height", "220px")
+                .set("max-height", "240px")
                 .set("overflow", "auto")
                 .set("border", "1px solid var(--lumo-contrast-10pct)")
-                .set("border-radius", "10px")
+                .set("border-radius", "12px")
                 .set("padding", "8px")
-                .set("box-sizing", "border-box");
+                .set("box-sizing", "border-box")
+                .set("background", "white");
 
         Span hint = new Span(
                 canWrite ? "Napiši komentar i pritisni Enter." : "Nemaš prava da dodaješ komentare."
         );
-        hint.getStyle().set("font-size", "var(--lumo-font-size-s)");
-        hint.getStyle().set("color", "var(--lumo-secondary-text-color)");
+        hint.getStyle()
+                .set("font-size", "var(--lumo-font-size-s)")
+                .set("color", "var(--lumo-secondary-text-color)");
 
         reloadComments = () -> {
             try {
@@ -385,7 +414,12 @@ public class TaskDialog extends Dialog {
             }
         });
 
-        root.add(title, commentsList, hint, input);
+        root.add(
+                buildSectionHeader("Komentari", "Diskusija i komunikacija vezana za task."),
+                commentsList,
+                hint,
+                input
+        );
         return root;
     }
 
@@ -397,25 +431,24 @@ public class TaskDialog extends Dialog {
         root.setSpacing(true);
         root.setWidthFull();
 
-        H3 title = new H3("Attachments");
-        title.getStyle().set("margin", "0");
-
         Span hint = new Span(
                 canWrite
                         ? "Dodaj fajl uz task."
-                        : "Možeš pregledati attachmente, ali nemaš pravo dodavanja ili brisanja."
+                        : "Možeš pregledati priloge, ali nemaš pravo dodavanja ili brisanja."
         );
-        hint.getStyle().set("font-size", "var(--lumo-font-size-s)");
-        hint.getStyle().set("color", "var(--lumo-secondary-text-color)");
+        hint.getStyle()
+                .set("font-size", "var(--lumo-font-size-s)")
+                .set("color", "var(--lumo-secondary-text-color)");
 
         attachmentsFilesWrap = new Div();
         attachmentsFilesWrap.setWidthFull();
         attachmentsFilesWrap.getStyle()
                 .set("border", "1px solid var(--lumo-contrast-10pct)")
-                .set("border-radius", "10px")
-                .set("padding", "8px")
+                .set("border-radius", "12px")
+                .set("padding", "10px")
                 .set("box-sizing", "border-box")
-                .set("overflow", "hidden");
+                .set("overflow", "hidden")
+                .set("background", "white");
 
         Upload upload = new Upload(UploadHandler.inMemory((metadata, data) -> {
             try {
@@ -448,7 +481,12 @@ public class TaskDialog extends Dialog {
 
         refreshAttachmentsList(attachmentsFilesWrap, cardId, canWrite);
 
-        root.add(title, hint, upload, attachmentsFilesWrap);
+        root.add(
+                buildSectionHeader("Prilozi", "Dokumenti i ostali fajlovi vezani za task."),
+                hint,
+                upload,
+                attachmentsFilesWrap
+        );
         return root;
     }
 
@@ -475,7 +513,7 @@ public class TaskDialog extends Dialog {
                 row.setJustifyContentMode(JustifyContentMode.BETWEEN);
 
                 row.getStyle()
-                        .set("padding", "6px 0")
+                        .set("padding", "8px 0")
                         .set("border-bottom", "1px solid var(--lumo-contrast-10pct)")
                         .set("box-sizing", "border-box");
 
@@ -501,14 +539,14 @@ public class TaskDialog extends Dialog {
 
                 if (canWrite) {
                     Button deleteBtn = new Button("Obriši");
-                    deleteBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+                    deleteBtn.addThemeVariants(ButtonVariant.LUMO_ERROR);
 
                     deleteBtn.addClickListener(e -> {
                         try {
                             User actor2 = requireActorUser();
                             services.cardAttachmentService.delete(a.getId(), actor2);
 
-                            Notification.show("Attachment obrisan.");
+                            Notification.show("Prilog obrisan.");
                             refreshAttachmentsList(filesWrap, cardId, canWrite);
                             refreshActivitySection();
                         } catch (Exception ex) {
@@ -525,7 +563,7 @@ public class TaskDialog extends Dialog {
             }
 
         } catch (Exception ex) {
-            Notification.show("Ne mogu učitati attachmente: " + ex.getMessage(),
+            Notification.show("Ne mogu učitati priloge: " + ex.getMessage(),
                     4000, Notification.Position.MIDDLE);
         }
     }
@@ -538,10 +576,12 @@ public class TaskDialog extends Dialog {
     private static void applyCardStyle(VerticalLayout layout) {
         layout.getStyle()
                 .set("border", "1px solid var(--lumo-contrast-10pct)")
-                .set("border-radius", "12px")
-                .set("padding", "12px")
+                .set("border-radius", "16px")
+                .set("padding", "16px")
                 .set("box-sizing", "border-box")
-                .set("overflow", "hidden");
+                .set("overflow", "hidden")
+                .set("background", "white")
+                .set("box-shadow", "0 2px 8px rgba(0,0,0,0.04)");
     }
 
     private static String nullSafe(String s) {

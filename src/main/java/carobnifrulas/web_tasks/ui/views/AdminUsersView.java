@@ -3,39 +3,44 @@ package carobnifrulas.web_tasks.ui.views;
 import carobnifrulas.web_tasks.ui.MainView;
 import carobnifrulas.web_tasks.ui.menu.MenuTab;
 import carobnifrulas.web_tasks.user.User;
+import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.confirmdialog.ConfirmDialog;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.html.H2;
+import com.vaadin.flow.component.html.H4;
 import com.vaadin.flow.component.html.Paragraph;
 import com.vaadin.flow.component.html.Span;
+import com.vaadin.flow.component.icon.Icon;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.orderedlayout.FlexComponent;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
+import com.vaadin.flow.component.orderedlayout.Scroller;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.select.Select;
 import com.vaadin.flow.component.textfield.TextField;
+import com.vaadin.flow.component.checkbox.Checkbox;
 import com.vaadin.flow.data.value.ValueChangeMode;
 import com.vaadin.flow.dom.DomEventListener;
-import org.springframework.stereotype.Component;
+
 
 import java.util.ArrayList;
 import java.util.List;
 
 import static com.vaadin.flow.component.button.ButtonVariant.LUMO_PRIMARY;
 
-@Component
+@org.springframework.stereotype.Component
 public class AdminUsersView extends View implements MenuTab {
 
     private final Grid<User> grid = new Grid<>(User.class, false);
 
-    // cache za filtering
     private List<User> allUsers = List.of();
+    private Span count;
+    private HorizontalLayout summaryRow;
 
-    // state
     private final FilterState filterState = new FilterState();
 
     private static final class FilterState {
@@ -54,21 +59,102 @@ public class AdminUsersView extends View implements MenuTab {
 
     @Override
     public void setElements() {
-        add(new H2("Admin - Users"));
+        add(buildHeaderSection());
 
-        // sigurnosna provjera (MVP): admin@local
         if (!"admin@local".equalsIgnoreCase(loggedUser.getEmail())) {
-            add(new Paragraph("Nemaš pristup ovoj stranici."));
+            VerticalLayout denied = new VerticalLayout();
+            denied.setPadding(false);
+            denied.setSpacing(true);
+            denied.setDefaultHorizontalComponentAlignment(FlexComponent.Alignment.CENTER);
+            denied.setWidthFull();
+            denied.getStyle()
+                    .set("padding", "36px")
+                    .set("border", "1px dashed var(--lumo-contrast-20pct)")
+                    .set("border-radius", "16px")
+                    .set("color", "var(--lumo-secondary-text-color)");
+
+            Icon lock = VaadinIcon.LOCK.create();
+            lock.setSize("28px");
+
+            Span text = new Span("Nemaš pristup ovoj stranici.");
+            denied.add(lock, text);
+
+            add(denied);
             return;
         }
+
+        count = new Span();
+        count.getStyle()
+                .set("font-size", "var(--lumo-font-size-s)")
+                .set("color", "var(--lumo-secondary-text-color)")
+                .set("margin-left", "auto");
+
+        summaryRow = new HorizontalLayout();
+        summaryRow.setWidthFull();
+        summaryRow.setSpacing(true);
+        summaryRow.getStyle().set("margin-top", "6px");
+
+        add(summaryRow);
+        add(buildFilterBar());
+
+        configureGrid();
+
+        VerticalLayout gridWrap = new VerticalLayout(grid);
+        gridWrap.setPadding(false);
+        gridWrap.setSpacing(false);
+        gridWrap.setWidthFull();
+        gridWrap.getStyle()
+                .set("border", "1px solid var(--lumo-contrast-10pct)")
+                .set("border-radius", "16px")
+                .set("padding", "12px")
+                .set("background", "white")
+                .set("box-shadow", "0 2px 8px rgba(0,0,0,0.04)");
+
+        add(gridWrap);
+
+        refreshAllUsers();
+        applyFiltersAndRender();
+    }
+
+    private Component buildHeaderSection() {
+        VerticalLayout wrap = new VerticalLayout();
+        wrap.setPadding(false);
+        wrap.setSpacing(true);
+        wrap.setWidthFull();
+        wrap.getStyle()
+                .set("border", "1px solid var(--lumo-contrast-10pct)")
+                .set("border-radius", "18px")
+                .set("padding", "18px")
+                .set("background", "linear-gradient(to right, var(--lumo-primary-color-10pct), white)");
+
+        H2 title = new H2("Admin - Users");
+        title.getStyle().set("margin", "0");
+
+        Paragraph subtitle = new Paragraph("Pregled korisnika, reset lozinki i kreiranje novih naloga.");
+        subtitle.getStyle()
+                .set("margin", "0")
+                .set("color", "var(--lumo-secondary-text-color)");
 
         Button addUser = new Button("Dodaj korisnika", e -> openAddDialog());
         addUser.setIcon(VaadinIcon.PLUS.create());
         addUser.addThemeVariants(LUMO_PRIMARY);
 
-        configureGrid();
+        HorizontalLayout top = new HorizontalLayout();
+        top.setWidthFull();
+        top.setJustifyContentMode(FlexComponent.JustifyContentMode.BETWEEN);
+        top.setDefaultVerticalComponentAlignment(FlexComponent.Alignment.CENTER);
 
-        // ===== FILTER BAR =====
+        VerticalLayout left = new VerticalLayout(title, subtitle);
+        left.setPadding(false);
+        left.setSpacing(false);
+
+        top.add(left, addUser);
+        wrap.add(top);
+
+        return wrap;
+    }
+
+    private Component buildFilterBar() {
         HorizontalLayout bar = new HorizontalLayout();
         bar.setWidthFull();
         bar.setDefaultVerticalComponentAlignment(FlexComponent.Alignment.END);
@@ -109,79 +195,34 @@ public class AdminUsersView extends View implements MenuTab {
         Button reset = new Button("Reset");
         reset.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
 
-
-        Span count = new Span();
-        count.getStyle()
-                .set("font-size", "var(--lumo-font-size-s)")
-                .set("color", "var(--lumo-secondary-text-color)")
-                .set("margin-left", "auto");
-
         bar.add(idSearch, emailSearch, nameSearch, must, reset, count);
+        bar.setFlexGrow(1, emailSearch);
+
         bar.getStyle()
                 .set("border", "1px solid var(--lumo-contrast-10pct)")
-                .set("border-radius", "12px")
-                .set("padding", "10px")
-                .set("margin-top", "8px");
-
-        // ===== LOAD + APPLY FILTERS =====
-        refreshAllUsers();
-
-        Runnable applyFilters = () -> {
-            String idq = filterState.idQuery == null ? "" : filterState.idQuery.trim();
-            String eq = filterState.emailQuery == null ? "" : filterState.emailQuery.trim().toLowerCase();
-            String nq = filterState.nameQuery == null ? "" : filterState.nameQuery.trim().toLowerCase();
-            String mustVal = filterState.mustChange;
-
-            List<User> filtered = new ArrayList<>();
-
-            for (User u : allUsers) {
-
-                if (!idq.isEmpty()) {
-                    String idStr = u.getId() == null ? "" : String.valueOf(u.getId());
-                    if (!idStr.contains(idq)) continue;
-                }
-
-                if (!eq.isEmpty()) {
-                    String em = u.getEmail() == null ? "" : u.getEmail().toLowerCase();
-                    if (!em.contains(eq)) continue;
-                }
-
-                if (!nq.isEmpty()) {
-                    String fn = u.getFullName() == null ? "" : u.getFullName().toLowerCase();
-                    if (!fn.contains(nq)) continue;
-                }
-
-                if (mustVal != null) {
-                    boolean m = u.isMustChangePassword();
-                    if ("DA".equals(mustVal) && !m) continue;
-                    if ("NE".equals(mustVal) && m) continue;
-                }
-
-                filtered.add(u);
-            }
-
-            grid.setItems(filtered);
-            count.setText("Prikaz: " + filtered.size() + " / " + allUsers.size());
-        };
+                .set("border-radius", "14px")
+                .set("padding", "12px")
+                .set("margin-top", "8px")
+                .set("background", "white");
 
         idSearch.addValueChangeListener(e -> {
             filterState.idQuery = e.getValue();
-            applyFilters.run();
+            applyFiltersAndRender();
         });
 
         emailSearch.addValueChangeListener(e -> {
             filterState.emailQuery = e.getValue();
-            applyFilters.run();
+            applyFiltersAndRender();
         });
 
         nameSearch.addValueChangeListener(e -> {
             filterState.nameQuery = e.getValue();
-            applyFilters.run();
+            applyFiltersAndRender();
         });
 
         must.addValueChangeListener(e -> {
             filterState.mustChange = e.getValue();
-            applyFilters.run();
+            applyFiltersAndRender();
         });
 
         reset.addClickListener(e -> {
@@ -190,20 +231,20 @@ public class AdminUsersView extends View implements MenuTab {
             emailSearch.setValue("");
             nameSearch.setValue("");
             must.clear();
-            applyFilters.run();
+            applyFiltersAndRender();
         });
 
-        applyFilters.run();
-
-        add(addUser, bar, grid);
+        return bar;
     }
 
     private void configureGrid() {
-
-        grid.removeAllColumns(); // spriječi dupliranje kolona kad se view refresha
+        grid.removeAllColumns();
         grid.setWidthFull();
 
-        grid.addColumn(User::getId).setHeader("ID").setAutoWidth(true);
+        grid.addColumn(User::getId)
+                .setHeader("ID")
+                .setAutoWidth(true)
+                .setFlexGrow(0);
 
         grid.addColumn(User::getEmail)
                 .setHeader("Email")
@@ -215,25 +256,22 @@ public class AdminUsersView extends View implements MenuTab {
                 .setAutoWidth(true)
                 .setFlexGrow(1);
 
-        grid.addColumn(u -> u.isMustChangePassword() ? "DA" : "NE")
+        grid.addComponentColumn(this::buildMustChangeBadge)
                 .setHeader("Mora promj. lozinku")
-                .setAutoWidth(true);
+                .setAutoWidth(true)
+                .setFlexGrow(0);
 
         grid.addComponentColumn(u -> {
             Button reset = new Button("Reset PW", e -> openResetDialog(u));
-            reset.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-
             reset.setIcon(VaadinIcon.REFRESH.create());
+            reset.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
             return reset;
         }).setHeader("Reset").setAutoWidth(true);
 
-        // ✅ NOVO: Delete kolona
         grid.addComponentColumn(u -> {
             Button del = new Button("Obriši");
-            del.addThemeVariants(ButtonVariant.LUMO_ERROR);
-
             del.setIcon(VaadinIcon.TRASH.create());
-            del.getStyle().set("color", "crimson");
+            del.addThemeVariants(ButtonVariant.LUMO_ERROR);
 
             if (u.getEmail() != null && "admin@local".equalsIgnoreCase(u.getEmail())) {
                 del.setEnabled(false);
@@ -253,7 +291,7 @@ public class AdminUsersView extends View implements MenuTab {
                     try {
                         services.userService.deleteUser(u.getId());
                         refreshAllUsers();
-                        MainView.getMainView().setContent(this);
+                        applyFiltersAndRender();
                         Notification.show("Korisnik obrisan.");
                     } catch (Exception ex) {
                         Notification.show(ex.getMessage());
@@ -269,9 +307,124 @@ public class AdminUsersView extends View implements MenuTab {
         grid.setAllRowsVisible(true);
     }
 
+    private Component buildMustChangeBadge(User u) {
+        boolean must = u.isMustChangePassword();
+
+        Span badge = new Span(must ? "DA" : "NE");
+        badge.getStyle()
+                .set("font-size", "var(--lumo-font-size-s)")
+                .set("font-weight", "700")
+                .set("padding", "3px 10px")
+                .set("border-radius", "999px")
+                .set("background", must
+                        ? "var(--lumo-warning-color-10pct)"
+                        : "var(--lumo-success-color-10pct)")
+                .set("color", must
+                        ? "var(--lumo-warning-text-color)"
+                        : "var(--lumo-success-text-color)");
+
+        return badge;
+    }
+
     private void refreshAllUsers() {
         allUsers = services.userService.findAllUsers();
-        if (allUsers == null) allUsers = List.of();
+        if (allUsers == null) {
+            allUsers = List.of();
+        }
+    }
+
+    private void applyFiltersAndRender() {
+        String idq = filterState.idQuery == null ? "" : filterState.idQuery.trim();
+        String eq = filterState.emailQuery == null ? "" : filterState.emailQuery.trim().toLowerCase();
+        String nq = filterState.nameQuery == null ? "" : filterState.nameQuery.trim().toLowerCase();
+        String mustVal = filterState.mustChange;
+
+        List<User> filtered = new ArrayList<>();
+
+        for (User u : allUsers) {
+            if (!idq.isEmpty()) {
+                String idStr = u.getId() == null ? "" : String.valueOf(u.getId());
+                if (!idStr.contains(idq)) continue;
+            }
+
+            if (!eq.isEmpty()) {
+                String em = u.getEmail() == null ? "" : u.getEmail().toLowerCase();
+                if (!em.contains(eq)) continue;
+            }
+
+            if (!nq.isEmpty()) {
+                String fn = u.getFullName() == null ? "" : u.getFullName().toLowerCase();
+                if (!fn.contains(nq)) continue;
+            }
+
+            if (mustVal != null) {
+                boolean m = u.isMustChangePassword();
+                if ("DA".equals(mustVal) && !m) continue;
+                if ("NE".equals(mustVal) && m) continue;
+            }
+
+            filtered.add(u);
+        }
+
+        grid.setItems(filtered);
+        count.setText("Prikaz: " + filtered.size() + " / " + allUsers.size());
+        renderSummary(filtered);
+    }
+
+    private void renderSummary(List<User> filtered) {
+        summaryRow.removeAll();
+
+        int total = filtered.size();
+        int mustChange = 0;
+        int active = 0;
+        int admins = 0;
+
+        for (User u : filtered) {
+            if (u.isMustChangePassword()) {
+                mustChange++;
+            } else {
+                active++;
+            }
+
+            if (u.getEmail() != null && "admin@local".equalsIgnoreCase(u.getEmail())) {
+                admins++;
+            }
+        }
+
+        summaryRow.add(
+                buildSummaryCard("Ukupno", String.valueOf(total), "var(--lumo-primary-color-10pct)"),
+                buildSummaryCard("Aktivni", String.valueOf(active), "var(--lumo-success-color-10pct)"),
+                buildSummaryCard("Moraju promijeniti lozinku", String.valueOf(mustChange), "var(--lumo-warning-color-10pct)"),
+                buildSummaryCard("Admin nalozi", String.valueOf(admins), "var(--lumo-contrast-10pct)")
+        );
+    }
+
+    private Component buildSummaryCard(String label, String value, String background) {
+        VerticalLayout card = new VerticalLayout();
+        card.setPadding(false);
+        card.setSpacing(false);
+        card.setWidth("220px");
+
+        card.getStyle()
+                .set("border", "1px solid var(--lumo-contrast-10pct)")
+                .set("border-radius", "14px")
+                .set("padding", "14px")
+                .set("background", background)
+                .set("box-sizing", "border-box");
+
+        Span valueSpan = new Span(value);
+        valueSpan.getStyle()
+                .set("font-size", "28px")
+                .set("font-weight", "700");
+
+        Span labelSpan = new Span(label);
+        labelSpan.getStyle()
+                .set("font-size", "var(--lumo-font-size-s)")
+                .set("color", "var(--lumo-secondary-text-color)")
+                .set("margin-top", "6px");
+
+        card.add(valueSpan, labelSpan);
+        return card;
     }
 
     private void openAddDialog() {
@@ -301,23 +454,24 @@ public class AdminUsersView extends View implements MenuTab {
                 d.close();
 
                 refreshAllUsers();
-                MainView.getMainView().setContent(this);
+                applyFiltersAndRender();
 
                 showTempPasswordDialog(res.user().getEmail(), res.tempPassword());
             } catch (Exception ex) {
                 Notification.show(ex.getMessage());
             }
         });
-
         save.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
 
         Button cancel = new Button("Otkaži", e -> d.close());
         cancel.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
 
-
         HorizontalLayout actions = new HorizontalLayout(save, cancel);
+
         VerticalLayout layout = new VerticalLayout(email, fullName, actions);
         layout.setWidth("420px");
+        layout.setPadding(false);
+        layout.setSpacing(true);
 
         d.add(layout);
         d.open();
@@ -332,7 +486,7 @@ public class AdminUsersView extends View implements MenuTab {
             d.close();
 
             refreshAllUsers();
-            MainView.getMainView().setContent(this);
+            applyFiltersAndRender();
 
             showTempPasswordDialog(u.getEmail(), temp);
         });
@@ -341,11 +495,14 @@ public class AdminUsersView extends View implements MenuTab {
         Button cancel = new Button("Otkaži", e -> d.close());
         cancel.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
 
-
-        d.add(new VerticalLayout(
+        VerticalLayout layout = new VerticalLayout(
                 new Paragraph("Korisnik će morati promijeniti lozinku pri sljedećem login-u."),
                 new HorizontalLayout(doReset, cancel)
-        ));
+        );
+        layout.setPadding(false);
+        layout.setSpacing(true);
+
+        d.add(layout);
         d.open();
     }
 
@@ -356,17 +513,33 @@ public class AdminUsersView extends View implements MenuTab {
         Paragraph info = new Paragraph(
                 "Korisnik: " + email + "\nPrivremena lozinka: " + tempPassword
         );
-
-        info.getStyle().set("white-space", "pre-wrap").set("font-family", "monospace");
+        info.getStyle()
+                .set("white-space", "pre-wrap")
+                .set("font-family", "monospace");
 
         Button ok = new Button("OK", e -> d.close());
         ok.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
 
-        d.add(new VerticalLayout(info, ok));
+        VerticalLayout layout = new VerticalLayout(info, ok);
+        layout.setPadding(false);
+        layout.setSpacing(true);
+
+        d.add(layout);
         d.open();
     }
 
-    @Override public String getTabName() { return "Admin"; }
-    @Override public VaadinIcon getTabIcon() { return VaadinIcon.TOOLS; }
-    @Override public DomEventListener onTabClick() { return e -> MainView.getMainView().setContent(this); }
+    @Override
+    public String getTabName() {
+        return "Admin";
+    }
+
+    @Override
+    public VaadinIcon getTabIcon() {
+        return VaadinIcon.TOOLS;
+    }
+
+    @Override
+    public DomEventListener onTabClick() {
+        return e -> MainView.getMainView().setContent(this);
+    }
 }
