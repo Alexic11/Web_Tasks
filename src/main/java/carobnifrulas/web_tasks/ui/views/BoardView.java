@@ -95,7 +95,9 @@ public class BoardView extends View {
                                         return fn + " (" + r.getEmail() + ")";
                                     }
                                     return r.getEmail();
-                                }
+                                },
+                                (a, b) -> a,
+                                LinkedHashMap::new
                         ));
 
         add(buildHeaderSection(board.getName(), myRole, archived, canManageMembers, canArchive));
@@ -227,9 +229,17 @@ public class BoardView extends View {
             right.add(archivedBadge);
         }
 
-        Button membersBtn = new Button("Members",
-                VaadinIcon.USERS.create(),
-                e -> new BoardMembersDialog(boardId, loggedUser.getId(), services).open());
+        Button membersBtn = new Button("Members", VaadinIcon.USERS.create());
+        membersBtn.addClickListener(e -> {
+            BoardMembersDialog dialog = new BoardMembersDialog(
+                    boardId,
+                    loggedUser.getId(),
+                    services,
+                    () -> MainView.getMainView().setContent(new BoardView(boardId, filterState.copy()))
+            );
+
+            dialog.open();
+        });
         membersBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
         membersBtn.setVisible(canManageMembers && !archived);
 
@@ -379,6 +389,7 @@ public class BoardView extends View {
             if (!matchesFilters(c, idx, allLists.size())) {
                 continue;
             }
+
             col.add(renderCard(c, list.getId(), allLists, idx, canWrite, assigneeLabel));
         }
 
@@ -419,9 +430,11 @@ public class BoardView extends View {
             drop.setDropEffect(DropEffect.MOVE);
             drop.addDropListener(e -> {
                 Long movingId = draggedCardId.get();
+
                 if (movingId == null || movingId <= 0) {
                     return;
                 }
+
                 if (movingId.equals(c.getId())) {
                     return;
                 }
@@ -429,6 +442,7 @@ public class BoardView extends View {
                 try {
                     List<Card> inList = services.cardService.findByList(columnListId);
                     int targetIdx = 0;
+
                     for (int i = 0; i < inList.size(); i++) {
                         if (inList.get(i).getId().equals(c.getId())) {
                             targetIdx = i;
@@ -485,6 +499,7 @@ public class BoardView extends View {
         release.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
 
         boolean iAmAssignee = c.getAssignedTo() != null && c.getAssignedTo().equals(loggedUser.getId());
+
         take.setEnabled(c.getAssignedTo() == null);
         release.setEnabled(iAmAssignee);
 
@@ -499,6 +514,7 @@ public class BoardView extends View {
                         allLists.get(idx - 1).getId(),
                         loggedUser.getId()
                 );
+
                 MainView.getMainView().setContent(new BoardView(boardId, filterState.copy()));
             } catch (Exception ex) {
                 Notification.show(ex.getMessage());
@@ -516,6 +532,7 @@ public class BoardView extends View {
                         allLists.get(idx + 1).getId(),
                         loggedUser.getId()
                 );
+
                 MainView.getMainView().setContent(new BoardView(boardId, filterState.copy()));
             } catch (Exception ex) {
                 Notification.show(ex.getMessage());
@@ -524,6 +541,7 @@ public class BoardView extends View {
 
         left.setEnabled(idx > 0);
         right.setEnabled(idx < allLists.size() - 1);
+
         left.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
         right.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
 
@@ -606,15 +624,33 @@ public class BoardView extends View {
         List<Long> assItems = new ArrayList<>();
         assItems.add(-1L);
         assItems.addAll(assigneeLabel.keySet());
+
         assignee.setItems(assItems);
 
         assignee.setItemLabelGenerator(id -> {
-            if (id == null) return "Svi";
-            if (id == -1L) return "— Unassigned —";
+            if (id == null) {
+                return "Svi";
+            }
+
+            if (id == -1L) {
+                return "— Unassigned —";
+            }
+
             return assigneeLabel.getOrDefault(id, String.valueOf(id));
         });
 
-        assignee.setValue(filterState.assigneeId);
+        /*
+         * Bitno:
+         * Ako je ranije bio izabran korisnik koji više nije član boarda,
+         * ne smijemo setovati value koji više ne postoji u Select itemima.
+         */
+        if (filterState.assigneeId != null && assItems.contains(filterState.assigneeId)) {
+            assignee.setValue(filterState.assigneeId);
+        } else {
+            filterState.assigneeId = null;
+            assignee.clear();
+        }
+
         assignee.addValueChangeListener(e -> {
             filterState.assigneeId = e.getValue();
             refreshColumns.run();
@@ -685,27 +721,46 @@ public class BoardView extends View {
     private boolean matchesFilters(Card c, int listIdx, int totalLists) {
         if (filterState.assigneeId != null) {
             if (filterState.assigneeId == -1L) {
-                if (c.getAssignedTo() != null) return false;
+                if (c.getAssignedTo() != null) {
+                    return false;
+                }
             } else {
-                if (c.getAssignedTo() == null || !filterState.assigneeId.equals(c.getAssignedTo())) return false;
+                if (c.getAssignedTo() == null || !filterState.assigneeId.equals(c.getAssignedTo())) {
+                    return false;
+                }
             }
         }
 
         if (filterState.priority != null) {
             int p = c.getPriority() == null ? 1 : c.getPriority();
-            if (!filterState.priority.equals(p)) return false;
+
+            if (!filterState.priority.equals(p)) {
+                return false;
+            }
         }
 
         if (filterState.overdueOnly) {
-            if (c.getDueAt() == null) return false;
-            if (!c.getDueAt().isBefore(LocalDateTime.now())) return false;
-            if (listIdx == totalLists - 1) return false;
+            if (c.getDueAt() == null) {
+                return false;
+            }
+
+            if (!c.getDueAt().isBefore(LocalDateTime.now())) {
+                return false;
+            }
+
+            if (listIdx == totalLists - 1) {
+                return false;
+            }
         }
 
         String q = filterState.titleQuery == null ? "" : filterState.titleQuery.trim();
+
         if (!q.isEmpty()) {
             String t = c.getTitle() == null ? "" : c.getTitle();
-            if (!t.toLowerCase().contains(q.toLowerCase())) return false;
+
+            if (!t.toLowerCase().contains(q.toLowerCase())) {
+                return false;
+            }
         }
 
         return true;

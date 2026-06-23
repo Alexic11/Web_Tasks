@@ -24,15 +24,44 @@ public class BoardMembersDialog extends Dialog {
     private final Long actorUserId;
     private final ServicesHolder services;
 
+    /*
+     * Callback koji BoardView šalje ovom dialogu.
+     * Koristimo ga da javimo BoardView-u da treba refresh filtera,
+     * ali tek kada se dialog zatvori.
+     */
+    private final Runnable onMembersChanged;
+
+    /*
+     * Flag koji govori da se u dialogu stvarno desila izmjena:
+     * dodavanje člana, promjena role ili uklanjanje člana.
+     */
+    private boolean changed = false;
+
     private ComboBox<User> userBox;
 
     private final Grid<BoardMemberRepository.MemberRow> grid =
             new Grid<>(BoardMemberRepository.MemberRow.class, false);
 
+    /*
+     * Stari konstruktor ostaje zbog kompatibilnosti.
+     * Ako negdje drugo u aplikaciji pozivaš ovaj dialog bez callbacka,
+     * neće se ništa slomiti.
+     */
     public BoardMembersDialog(Long boardId, Long actorUserId, ServicesHolder services) {
+        this(boardId, actorUserId, services, null);
+    }
+
+    /*
+     * Novi konstruktor koji prima callback.
+     */
+    public BoardMembersDialog(Long boardId,
+                              Long actorUserId,
+                              ServicesHolder services,
+                              Runnable onMembersChanged) {
         this.boardId = boardId;
         this.actorUserId = actorUserId;
         this.services = services;
+        this.onMembersChanged = onMembersChanged == null ? () -> {} : onMembersChanged;
 
         setHeaderTitle("Members");
         setWidth("960px");
@@ -40,6 +69,19 @@ public class BoardMembersDialog extends Dialog {
         setModal(true);
         setDraggable(true);
         setResizable(true);
+
+        /*
+         * Kada korisnik zatvori dialog, ako je bilo izmjena,
+         * pozovi BoardView da se ponovo učita.
+         *
+         * Ovo je bolje nego da refreshujemo BoardView odmah nakon svakog dodavanja,
+         * jer bi se dialog zatvorio/nestao poslije prvog dodanog člana.
+         */
+        addOpenedChangeListener(e -> {
+            if (!e.isOpened() && changed) {
+                onMembersChanged.run();
+            }
+        });
 
         VerticalLayout root = new VerticalLayout(
                 buildIntroSection(),
@@ -106,9 +148,12 @@ public class BoardMembersDialog extends Dialog {
                         role.getValue()
                 );
 
+                changed = true;
+
                 userBox.clear();
                 role.setValue(BoardRole.MEMBER);
                 refresh();
+
                 Notification.show("Član je uspješno dodan.");
             } catch (Exception ex) {
                 Notification.show(ex.getMessage());
@@ -155,6 +200,7 @@ public class BoardMembersDialog extends Dialog {
 
         grid.addComponentColumn(r -> {
             BoardRole current = BoardRole.valueOf(r.getRole());
+
             if (current == BoardRole.OWNER) {
                 Span s = new Span("—");
                 s.getStyle().set("color", "var(--lumo-secondary-text-color)");
@@ -172,7 +218,15 @@ public class BoardMembersDialog extends Dialog {
                 }
 
                 try {
-                    services.boardMemberService.changeRole(boardId, actorUserId, r.getUserId(), ev.getValue());
+                    services.boardMemberService.changeRole(
+                            boardId,
+                            actorUserId,
+                            r.getUserId(),
+                            ev.getValue()
+                    );
+
+                    changed = true;
+
                     Notification.show("Rola je sačuvana.");
                     refresh();
                 } catch (Exception ex) {
@@ -186,14 +240,21 @@ public class BoardMembersDialog extends Dialog {
 
         grid.addComponentColumn(r -> {
             BoardRole current = BoardRole.valueOf(r.getRole());
+
             if (current == BoardRole.OWNER) {
-                Span s = new Span("");
-                return s;
+                return new Span("");
             }
 
             Button remove = new Button("Ukloni", e -> {
                 try {
-                    services.boardMemberService.removeMember(boardId, actorUserId, r.getUserId());
+                    services.boardMemberService.removeMember(
+                            boardId,
+                            actorUserId,
+                            r.getUserId()
+                    );
+
+                    changed = true;
+
                     Notification.show("Član je uklonjen.");
                     refresh();
                 } catch (Exception ex) {
@@ -255,6 +316,7 @@ public class BoardMembersDialog extends Dialog {
 
     private void refresh() {
         grid.setItems(services.boardMemberService.listMemberRows(boardId));
+
         if (userBox != null) {
             userBox.setItems(services.boardMemberService.listUsersNotInBoard(boardId));
         }
