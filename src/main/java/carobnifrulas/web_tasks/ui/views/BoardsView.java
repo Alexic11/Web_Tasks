@@ -173,7 +173,9 @@ public class BoardsView extends View implements MenuTab {
 
         grid.addComponentColumn(b -> {
             Button open = new Button("Otvori",
-                    e -> MainView.getMainView().setContent(new BoardView(b.getId())));
+                    e -> MainView.getMainView().setContent(
+                            new BoardView(b.getId(), BoardView.BackTarget.BOARDS)
+                    ));
             open.setIcon(VaadinIcon.ARROW_RIGHT.create());
             open.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
             return open;
@@ -241,7 +243,9 @@ public class BoardsView extends View implements MenuTab {
         }).setHeader("Zatvori").setAutoWidth(true);
 
         grid.addItemDoubleClickListener(ev ->
-                MainView.getMainView().setContent(new BoardView(ev.getItem().getId()))
+                MainView.getMainView().setContent(
+                        new BoardView(ev.getItem().getId(), BoardView.BackTarget.BOARDS)
+                )
         );
 
         grid.setAllRowsVisible(true);

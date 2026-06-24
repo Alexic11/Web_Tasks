@@ -9,7 +9,6 @@ import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.confirmdialog.ConfirmDialog;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.html.H2;
-//import com.vaadin.flow.component.html.Icon;
 import com.vaadin.flow.component.html.Paragraph;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.VaadinIcon;
@@ -233,7 +232,9 @@ public class ArchivedBoardsView extends View implements MenuTab {
         }).setHeader("Akcija").setAutoWidth(true);
 
         grid.addItemDoubleClickListener(ev ->
-                MainView.getMainView().setContent(new BoardView(ev.getItem().getId()))
+                MainView.getMainView().setContent(
+                        new BoardView(ev.getItem().getId(), BoardView.BackTarget.HISTORY)
+                )
         );
 
         grid.setAllRowsVisible(true);

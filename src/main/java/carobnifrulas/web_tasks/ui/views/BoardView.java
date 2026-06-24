@@ -39,9 +39,15 @@ import java.util.stream.Collectors;
 
 public class BoardView extends View {
 
+    public enum BackTarget {
+        BOARDS,
+        HISTORY
+    }
+
     private final Long boardId;
     private final AtomicLong draggedCardId = new AtomicLong(-1L);
     private final FilterState filterState;
+    private final BackTarget backTarget;
 
     private static final class FilterState {
         Long assigneeId;
@@ -63,12 +69,21 @@ public class BoardView extends View {
             DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
 
     public BoardView(Long boardId) {
-        this(boardId, new FilterState());
+        this(boardId, new FilterState(), BackTarget.BOARDS);
+    }
+
+    public BoardView(Long boardId, BackTarget backTarget) {
+        this(boardId, new FilterState(), backTarget);
     }
 
     private BoardView(Long boardId, FilterState state) {
+        this(boardId, state, BackTarget.BOARDS);
+    }
+
+    private BoardView(Long boardId, FilterState state, BackTarget backTarget) {
         this.boardId = boardId;
         this.filterState = state == null ? new FilterState() : state;
+        this.backTarget = backTarget == null ? BackTarget.BOARDS : backTarget;
     }
 
     @Override
@@ -191,8 +206,13 @@ public class BoardView extends View {
                 .set("padding", "18px")
                 .set("background", "linear-gradient(to right, var(--lumo-primary-color-10pct), white)");
 
-        Button back = new Button("Nazad",
-                e -> MainView.getMainView().setContent(services.menu.getDefaultView()));
+        Button back = new Button("Nazad", e -> {
+            if (backTarget == BackTarget.HISTORY) {
+                MainView.getMainView().setContent(new ArchivedBoardsView());
+            } else {
+                MainView.getMainView().setContent(new BoardsView());
+            }
+        });
         back.setIcon(VaadinIcon.ARROW_LEFT.create());
         back.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
 
@@ -235,7 +255,9 @@ public class BoardView extends View {
                     boardId,
                     loggedUser.getId(),
                     services,
-                    () -> MainView.getMainView().setContent(new BoardView(boardId, filterState.copy()))
+                    () -> MainView.getMainView().setContent(
+                            new BoardView(boardId, filterState.copy(), backTarget)
+                    )
             );
 
             dialog.open();
@@ -377,7 +399,7 @@ public class BoardView extends View {
                 try {
                     int endIndex = services.cardService.findByList(list.getId()).size();
                     services.cardService.reorderWithinList(movingId, list.getId(), endIndex, loggedUser.getId());
-                    MainView.getMainView().setContent(new BoardView(boardId, filterState.copy()));
+                    MainView.getMainView().setContent(new BoardView(boardId, filterState.copy(), backTarget));
                 } catch (Exception ex) {
                     Notification.show(ex.getMessage());
                 }
@@ -451,7 +473,7 @@ public class BoardView extends View {
                     }
 
                     services.cardService.reorderWithinList(movingId, columnListId, targetIdx, loggedUser.getId());
-                    MainView.getMainView().setContent(new BoardView(boardId, filterState.copy()));
+                    MainView.getMainView().setContent(new BoardView(boardId, filterState.copy(), backTarget));
                 } catch (Exception ex) {
                     Notification.show(ex.getMessage());
                 }
@@ -488,13 +510,13 @@ public class BoardView extends View {
 
         Button take = new Button("Preuzmi", e -> {
             services.cardService.assignToMe(c.getId(), loggedUser.getId());
-            MainView.getMainView().setContent(new BoardView(boardId, filterState.copy()));
+            MainView.getMainView().setContent(new BoardView(boardId, filterState.copy(), backTarget));
         });
         take.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
 
         Button release = new Button("Pusti", e -> {
             services.cardService.unassign(c.getId(), loggedUser.getId());
-            MainView.getMainView().setContent(new BoardView(boardId, filterState.copy()));
+            MainView.getMainView().setContent(new BoardView(boardId, filterState.copy(), backTarget));
         });
         release.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
 
@@ -515,7 +537,7 @@ public class BoardView extends View {
                         loggedUser.getId()
                 );
 
-                MainView.getMainView().setContent(new BoardView(boardId, filterState.copy()));
+                MainView.getMainView().setContent(new BoardView(boardId, filterState.copy(), backTarget));
             } catch (Exception ex) {
                 Notification.show(ex.getMessage());
             }
@@ -533,7 +555,7 @@ public class BoardView extends View {
                         loggedUser.getId()
                 );
 
-                MainView.getMainView().setContent(new BoardView(boardId, filterState.copy()));
+                MainView.getMainView().setContent(new BoardView(boardId, filterState.copy(), backTarget));
             } catch (Exception ex) {
                 Notification.show(ex.getMessage());
             }
@@ -639,11 +661,6 @@ public class BoardView extends View {
             return assigneeLabel.getOrDefault(id, String.valueOf(id));
         });
 
-        /*
-         * Bitno:
-         * Ako je ranije bio izabran korisnik koji više nije član boarda,
-         * ne smijemo setovati value koji više ne postoji u Select itemima.
-         */
         if (filterState.assigneeId != null && assItems.contains(filterState.assigneeId)) {
             assignee.setValue(filterState.assigneeId);
         } else {
