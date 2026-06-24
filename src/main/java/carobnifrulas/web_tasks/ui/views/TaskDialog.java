@@ -450,43 +450,84 @@ public class TaskDialog extends Dialog {
                 .set("overflow", "hidden")
                 .set("background", "white");
 
-        Upload upload = new Upload(UploadHandler.inMemory((metadata, data) -> {
-            try {
-                User actor = requireActorUser();
-                try (ByteArrayInputStream in = new ByteArrayInputStream(data)) {
-                    services.cardAttachmentService.upload(
-                            cardId,
-                            actor,
-                            metadata.fileName(),
-                            metadata.contentType(),
-                            in
-                    );
+        com.vaadin.flow.component.Component uploadArea;
+
+        if (canWrite) {
+            Upload upload = new Upload(UploadHandler.inMemory((metadata, data) -> {
+                try {
+                    if (!canWrite) {
+                        throw new IllegalStateException("Nemaš pravo dodavanja priloga.");
+                    }
+
+                    User actor = requireActorUser();
+
+                    try (ByteArrayInputStream in = new ByteArrayInputStream(data)) {
+                        services.cardAttachmentService.upload(
+                                cardId,
+                                actor,
+                                metadata.fileName(),
+                                metadata.contentType(),
+                                in
+                        );
+                    }
+
+                    getUI().ifPresent(ui -> ui.access(() -> {
+                        Notification.show("Fajl uspješno dodan.");
+                        refreshAttachmentsList(attachmentsFilesWrap, cardId, canWrite);
+                        refreshActivitySection();
+                    }));
+                } catch (Exception ex) {
+                    throw new RuntimeException(ex);
                 }
+            }));
 
-                getUI().ifPresent(ui -> ui.access(() -> {
-                    Notification.show("Fajl uspješno dodan.");
-                    refreshAttachmentsList(attachmentsFilesWrap, cardId, canWrite);
-                    refreshActivitySection();
-                }));
-            } catch (Exception ex) {
-                throw new RuntimeException(ex);
-            }
-        }));
+            upload.setWidthFull();
+            upload.setDropLabel(new Span("Prevuci fajl ovdje ili klikni za odabir."));
+            upload.setMaxFiles(10);
+            upload.setEnabled(true);
+            upload.addClassName("attachments-upload");
 
-        upload.setWidthFull();
-        upload.setDropLabel(new Span("Prevuci fajl ovdje ili klikni za odabir."));
-        upload.setMaxFiles(10);
-        upload.setEnabled(canWrite);
-        upload.addClassName("attachments-upload");
+            uploadArea = upload;
+
+        } else {
+            Div disabledUpload = new Div();
+            disabledUpload.setWidthFull();
+            disabledUpload.getStyle()
+                    .set("border", "1px dashed var(--lumo-contrast-20pct)")
+                    .set("border-radius", "12px")
+                    .set("padding", "20px 16px")
+                    .set("box-sizing", "border-box")
+                    .set("background", "var(--lumo-contrast-5pct)")
+                    .set("opacity", "0.75")
+                    .set("pointer-events", "none");
+
+            Button disabledUploadBtn = new Button("Upload Files...");
+            disabledUploadBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+            disabledUploadBtn.setEnabled(false);
+
+            Span disabledText = new Span("Upload nije dozvoljen za VIEWER korisnika.");
+            disabledText.getStyle()
+                    .set("color", "var(--lumo-secondary-text-color)")
+                    .set("font-size", "var(--lumo-font-size-s)");
+
+            HorizontalLayout disabledRow = new HorizontalLayout(disabledUploadBtn, disabledText);
+            disabledRow.setPadding(false);
+            disabledRow.setSpacing(true);
+            disabledRow.setDefaultVerticalComponentAlignment(Alignment.CENTER);
+
+            disabledUpload.add(disabledRow);
+            uploadArea = disabledUpload;
+        }
 
         refreshAttachmentsList(attachmentsFilesWrap, cardId, canWrite);
 
         root.add(
                 buildSectionHeader("Prilozi", "Dokumenti i ostali fajlovi vezani za task."),
                 hint,
-                upload,
+                uploadArea,
                 attachmentsFilesWrap
         );
+
         return root;
     }
 
