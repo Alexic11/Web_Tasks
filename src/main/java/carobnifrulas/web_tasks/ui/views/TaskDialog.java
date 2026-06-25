@@ -3,6 +3,7 @@ package carobnifrulas.web_tasks.ui.views;
 import carobnifrulas.web_tasks.board.BoardMemberRepository;
 import carobnifrulas.web_tasks.board.BoardRole;
 import carobnifrulas.web_tasks.card.Card;
+import carobnifrulas.web_tasks.card.CardPresenceBus;
 import carobnifrulas.web_tasks.card.CardRealtimeBus;
 import carobnifrulas.web_tasks.card.TaskVersionConflictException;
 import carobnifrulas.web_tasks.card.activity.CardActivity;
@@ -63,6 +64,10 @@ public class TaskDialog extends Dialog {
     private final Long actorUserId;
     private final Card existing;
     private Long currentCardVersion;
+
+    private Div presenceWrap;
+    private Registration presenceRegistration;
+
     private final Runnable onTaskChanged;
     private final boolean hasTaskChangedCallback;
     private boolean taskChanged = false;
@@ -123,6 +128,7 @@ public class TaskDialog extends Dialog {
 
         addOpenedChangeListener(e -> {
             if (!e.isOpened()) {
+                unregisterPresence();
                 notifyTaskChangedIfNeeded();
             }
         });
@@ -271,6 +277,9 @@ public class TaskDialog extends Dialog {
             return;
         }
 
+        VerticalLayout presenceCard = buildPresenceSection(existing.getId(), canWrite);
+        applyCardStyle(presenceCard);
+
         VerticalLayout labelsCard = buildLabelsSection(existing.getId(), canWrite);
         applyCardStyle(labelsCard);
 
@@ -286,7 +295,7 @@ public class TaskDialog extends Dialog {
         VerticalLayout activityCard = buildActivitySection(existing.getId());
         applyCardStyle(activityCard);
 
-        VerticalLayout root = new VerticalLayout(detailsCard, labelsCard, checklistCard, attachmentsCard, commentsCard, activityCard);
+        VerticalLayout root = new VerticalLayout(presenceCard, detailsCard, labelsCard, checklistCard, attachmentsCard, commentsCard, activityCard);
         root.setPadding(false);
         root.setSpacing(true);
         root.setWidthFull();
@@ -386,6 +395,7 @@ public class TaskDialog extends Dialog {
                 realtimeRegistration.remove();
                 realtimeRegistration = null;
             }
+            unregisterPresence();
         });
     }
 
@@ -407,6 +417,140 @@ public class TaskDialog extends Dialog {
         if (reloadComments != null) {
             reloadComments.run();
         }
+    }
+
+    private VerticalLayout buildPresenceSection(Long cardId, boolean canWrite) {
+        VerticalLayout root = new VerticalLayout();
+        root.setPadding(false);
+        root.setSpacing(true);
+        root.setWidthFull();
+
+        Span hint = new Span(
+                canWrite
+                        ? "Ovdje vidiš ko trenutno ima otvoren isti task. Ovo pomaže da se izbjegnu paralelne izmjene bez dogovora."
+                        : "Ovdje vidiš ko trenutno pregleda isti task. VIEWER korisnik je označen kao pregled."
+        );
+        hint.getStyle()
+                .set("font-size", "var(--lumo-font-size-s)")
+                .set("color", "var(--lumo-secondary-text-color)");
+
+        presenceWrap = new Div();
+        presenceWrap.setWidthFull();
+        presenceWrap.getStyle()
+                .set("border", "1px solid var(--lumo-contrast-10pct)")
+                .set("border-radius", "12px")
+                .set("padding", "10px")
+                .set("box-sizing", "border-box")
+                .set("background", "white");
+
+        root.add(
+                buildSectionHeader("Prisustvo na tasku", "Korisnici koji trenutno imaju otvoren ovaj task."),
+                hint,
+                presenceWrap
+        );
+
+        registerPresence(cardId, canWrite);
+        renderPresence(CardPresenceBus.snapshot(cardId));
+
+        return root;
+    }
+
+    private void registerPresence(Long cardId, boolean canWrite) {
+        if (cardId == null || presenceRegistration != null) {
+            return;
+        }
+
+        User actor = requireActorUser();
+        String displayName = actor.getFullName();
+        if (displayName == null || displayName.isBlank()) {
+            displayName = actor.getEmail();
+        }
+
+        CardPresenceBus.PresenceMode mode = canWrite
+                ? CardPresenceBus.PresenceMode.EDITING
+                : CardPresenceBus.PresenceMode.VIEWING;
+
+        presenceRegistration = CardPresenceBus.register(
+                cardId,
+                actor.getId(),
+                displayName,
+                actor.getEmail(),
+                mode,
+                users -> getUI().ifPresent(ui -> ui.access(() -> renderPresence(users)))
+        );
+    }
+
+    private void unregisterPresence() {
+        if (presenceRegistration != null) {
+            presenceRegistration.remove();
+            presenceRegistration = null;
+        }
+    }
+
+    private void renderPresence(List<CardPresenceBus.PresenceUser> users) {
+        if (presenceWrap == null) {
+            return;
+        }
+
+        presenceWrap.removeAll();
+
+        List<CardPresenceBus.PresenceUser> visibleUsers = users == null ? List.of() : users;
+
+        long otherUsers = visibleUsers.stream()
+                .filter(u -> u.getUserId() == null || !u.getUserId().equals(actorUserId))
+                .count();
+
+        Span summary = new Span(
+                otherUsers == 0
+                        ? "Samo ti trenutno imaš otvoren ovaj task."
+                        : "Još " + otherUsers + " korisnik(a) trenutno ima otvoren ovaj task."
+        );
+        summary.getStyle()
+                .set("display", "block")
+                .set("font-size", "var(--lumo-font-size-s)")
+                .set("font-weight", "700")
+                .set("margin-bottom", "8px");
+
+        HorizontalLayout chips = new HorizontalLayout();
+        chips.setPadding(false);
+        chips.setSpacing(true);
+        chips.setWidthFull();
+        chips.getStyle()
+                .set("flex-wrap", "wrap")
+                .set("gap", "8px");
+
+        for (CardPresenceBus.PresenceUser user : visibleUsers) {
+            chips.add(buildPresenceChip(user));
+        }
+
+        presenceWrap.add(summary, chips);
+    }
+
+    private Span buildPresenceChip(CardPresenceBus.PresenceUser user) {
+        String name = user.getDisplayName();
+        if (name == null || name.isBlank()) {
+            name = user.getEmail();
+        }
+        if (name == null || name.isBlank()) {
+            name = "Nepoznat korisnik";
+        }
+
+        boolean self = user.getUserId() != null && user.getUserId().equals(actorUserId);
+        boolean editing = user.getMode() == CardPresenceBus.PresenceMode.EDITING;
+
+        String text = name + (self ? " (ti)" : "") + " · " + (editing ? "može da uređuje" : "samo pregleda");
+
+        Span chip = new Span(text);
+        chip.getStyle()
+                .set("font-size", "var(--lumo-font-size-s)")
+                .set("font-weight", "700")
+                .set("padding", "4px 10px")
+                .set("border-radius", "999px")
+                .set("border", "1px solid var(--lumo-contrast-10pct)")
+                .set("background", editing ? "var(--lumo-warning-color-10pct)" : "var(--lumo-primary-color-10pct)")
+                .set("color", editing ? "var(--lumo-warning-text-color)" : "var(--lumo-primary-text-color)");
+
+        return chip;
     }
 
     private VerticalLayout buildActivitySection(Long cardId) {
