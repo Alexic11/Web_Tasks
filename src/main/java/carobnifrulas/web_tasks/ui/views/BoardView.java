@@ -4,6 +4,7 @@ import carobnifrulas.web_tasks.board.BoardMemberRepository;
 import carobnifrulas.web_tasks.board.BoardRole;
 import carobnifrulas.web_tasks.card.Card;
 import carobnifrulas.web_tasks.card.checklist.CardChecklistService;
+import carobnifrulas.web_tasks.card.label.CardLabel;
 import carobnifrulas.web_tasks.list.ListEntity;
 import carobnifrulas.web_tasks.ui.MainView;
 import com.vaadin.flow.component.button.Button;
@@ -53,6 +54,7 @@ public class BoardView extends View {
     private static final class FilterState {
         Long assigneeId;
         Integer priority;
+        Long labelId;
         boolean overdueOnly;
         String titleQuery;
 
@@ -60,6 +62,7 @@ public class BoardView extends View {
             FilterState c = new FilterState();
             c.assigneeId = this.assigneeId;
             c.priority = this.priority;
+            c.labelId = this.labelId;
             c.overdueOnly = this.overdueOnly;
             c.titleQuery = this.titleQuery;
             return c;
@@ -116,6 +119,8 @@ public class BoardView extends View {
                                 LinkedHashMap::new
                         ));
 
+        List<CardLabel> boardLabels = services.cardLabelService.listLabelsForBoard(boardId, loggedUser.getId());
+
         add(buildHeaderSection(board.getName(), myRole, archived, canManageMembers, canArchive));
 
         if (archived) {
@@ -167,11 +172,14 @@ public class BoardView extends View {
                 Map<Long, CardChecklistService.ChecklistStats> checklistStats =
                         services.cardChecklistService.statsForCards(cardIds);
 
+                Map<Long, List<CardLabel>> labelsByCard =
+                        services.cardLabelService.labelsByCard(cardIds, loggedUser.getId());
+
                 int matchCount = 0;
                 for (int i = 0; i < lists.size(); i++) {
                     Long listId = lists.get(i).getId();
                     for (Card c : cardsByList.getOrDefault(listId, List.of())) {
-                        if (matchesFilters(c, i, lists.size())) {
+                        if (matchesFilters(c, i, lists.size(), labelsByCard)) {
                             matchCount++;
                         }
                     }
@@ -181,14 +189,14 @@ public class BoardView extends View {
 
                 for (int i = 0; i < lists.size(); i++) {
                     ListEntity list = lists.get(i);
-                    columns.add(buildColumn(list, lists, i, canWrite, assigneeLabel, cardsByList, checklistStats));
+                    columns.add(buildColumn(list, lists, i, canWrite, assigneeLabel, cardsByList, checklistStats, labelsByCard));
                 }
             } catch (Exception ex) {
                 Notification.show(ex.getMessage());
             }
         };
 
-        add(buildFilterBar(assigneeLabel, count, refreshColumns));
+        add(buildFilterBar(assigneeLabel, boardLabels, count, refreshColumns));
 
         refreshColumns.run();
 
@@ -336,7 +344,8 @@ public class BoardView extends View {
                                                             boolean canWrite,
                                                             Map<Long, String> assigneeLabel,
                                                             Map<Long, List<Card>> cardsByList,
-                                                            Map<Long, CardChecklistService.ChecklistStats> checklistStats) {
+                                                            Map<Long, CardChecklistService.ChecklistStats> checklistStats,
+                                                            Map<Long, List<CardLabel>> labelsByCard) {
 
         VerticalLayout col = new VerticalLayout();
         col.setPadding(false);
@@ -359,7 +368,7 @@ public class BoardView extends View {
 
         List<Card> listCards = cardsByList.getOrDefault(list.getId(), List.of());
         long visibleCount = listCards.stream()
-                .filter(c -> matchesFilters(c, idx, allLists.size()))
+                .filter(c -> matchesFilters(c, idx, allLists.size(), labelsByCard))
                 .count();
 
         Span listCount = new Span(String.valueOf(visibleCount));
@@ -418,11 +427,11 @@ public class BoardView extends View {
 
         List<Card> cards = cardsByList.getOrDefault(list.getId(), List.of());
         for (Card c : cards) {
-            if (!matchesFilters(c, idx, allLists.size())) {
+            if (!matchesFilters(c, idx, allLists.size(), labelsByCard)) {
                 continue;
             }
 
-            col.add(renderCard(c, list.getId(), allLists, idx, canWrite, assigneeLabel, checklistStats));
+            col.add(renderCard(c, list.getId(), allLists, idx, canWrite, assigneeLabel, checklistStats, labelsByCard));
         }
 
         return col;
@@ -434,7 +443,8 @@ public class BoardView extends View {
                                                            int idx,
                                                            boolean canWrite,
                                                            Map<Long, String> assigneeLabel,
-                                                           Map<Long, CardChecklistService.ChecklistStats> checklistStats) {
+                                                           Map<Long, CardChecklistService.ChecklistStats> checklistStats,
+                                                           Map<Long, List<CardLabel>> labelsByCard) {
 
         VerticalLayout box = new VerticalLayout();
         box.setPadding(false);
@@ -491,7 +501,12 @@ public class BoardView extends View {
             });
         }
 
-        box.addClickListener(ev -> TaskDialog.edit(services, c, loggedUser.getId()).open());
+        box.addClickListener(ev -> TaskDialog.edit(
+                services,
+                c,
+                loggedUser.getId(),
+                () -> MainView.getMainView().setContent(new BoardView(boardId, filterState.copy(), backTarget))
+        ).open());
 
         Span title = new Span(c.getTitle());
         title.getStyle()
@@ -507,6 +522,8 @@ public class BoardView extends View {
         assignee.getStyle()
                 .set("font-size", "var(--lumo-font-size-s)")
                 .set("color", "var(--lumo-secondary-text-color)");
+
+        com.vaadin.flow.component.Component labels = buildLabelsRow(labelsByCard.getOrDefault(c.getId(), List.of()));
 
         Span priority = buildPriorityBadge(c.getPriority());
         Span due = buildDueLabel(c.getDueAt());
@@ -581,8 +598,76 @@ public class BoardView extends View {
 
         actions.add(take, release, left, right);
 
-        box.add(title, assignee, meta, actions);
+        box.add(title, labels, assignee, meta, actions);
         return box;
+    }
+
+    private com.vaadin.flow.component.Component buildLabelsRow(List<CardLabel> labels) {
+        FlexLayout row = new FlexLayout();
+        row.setWidthFull();
+        row.setFlexWrap(FlexLayout.FlexWrap.WRAP);
+        row.getStyle()
+                .set("gap", "4px")
+                .set("margin", "0");
+
+        if (labels == null || labels.isEmpty()) {
+            Span empty = new Span("Labele: —");
+            empty.getStyle()
+                    .set("font-size", "var(--lumo-font-size-s)")
+                    .set("color", "var(--lumo-secondary-text-color)");
+            row.add(empty);
+            return row;
+        }
+
+        for (CardLabel label : labels) {
+            row.add(buildLabelChip(label));
+        }
+
+        return row;
+    }
+
+    private Span buildLabelChip(CardLabel label) {
+        Span chip = new Span(label.getName());
+        chip.getStyle()
+                .set("font-size", "var(--lumo-font-size-xs)")
+                .set("font-weight", "700")
+                .set("padding", "2px 8px")
+                .set("border-radius", "999px")
+                .set("background", labelBackground(label.getColor()))
+                .set("color", labelTextColor(label.getColor()))
+                .set("border", "1px solid " + labelBorderColor(label.getColor()));
+        return chip;
+    }
+
+    private static String labelBackground(String color) {
+        return switch (color == null ? "BLUE" : color) {
+            case "GREEN" -> "var(--lumo-success-color-10pct)";
+            case "YELLOW" -> "var(--lumo-warning-color-10pct)";
+            case "RED" -> "var(--lumo-error-color-10pct)";
+            case "PURPLE" -> "var(--lumo-primary-color-10pct)";
+            case "GRAY" -> "var(--lumo-contrast-10pct)";
+            default -> "var(--lumo-primary-color-10pct)";
+        };
+    }
+
+    private static String labelTextColor(String color) {
+        return switch (color == null ? "BLUE" : color) {
+            case "GREEN" -> "var(--lumo-success-text-color)";
+            case "YELLOW" -> "var(--lumo-warning-text-color)";
+            case "RED" -> "var(--lumo-error-text-color)";
+            case "GRAY" -> "var(--lumo-secondary-text-color)";
+            default -> "var(--lumo-primary-text-color)";
+        };
+    }
+
+    private static String labelBorderColor(String color) {
+        return switch (color == null ? "BLUE" : color) {
+            case "GREEN" -> "var(--lumo-success-color-30pct)";
+            case "YELLOW" -> "var(--lumo-warning-color-30pct)";
+            case "RED" -> "var(--lumo-error-color-30pct)";
+            case "GRAY" -> "var(--lumo-contrast-20pct)";
+            default -> "var(--lumo-primary-color-30pct)";
+        };
     }
 
     private Span buildChecklistBadge(CardChecklistService.ChecklistStats stats) {
@@ -670,6 +755,7 @@ public class BoardView extends View {
     }
 
     private com.vaadin.flow.component.Component buildFilterBar(Map<Long, String> assigneeLabel,
+                                                               List<CardLabel> boardLabels,
                                                                Span count,
                                                                Runnable refreshColumns) {
         HorizontalLayout bar = new HorizontalLayout();
@@ -727,6 +813,43 @@ public class BoardView extends View {
             refreshColumns.run();
         });
 
+        Select<Long> label = new Select<>();
+        label.setLabel("Labela");
+        label.setWidth("220px");
+        label.setEmptySelectionAllowed(true);
+        label.setEmptySelectionCaption("Sve");
+
+        List<Long> labelItems = new ArrayList<>();
+        if (boardLabels != null) {
+            labelItems.addAll(boardLabels.stream().map(CardLabel::getId).toList());
+        }
+        label.setItems(labelItems);
+        label.setItemLabelGenerator(id -> {
+            if (id == null) {
+                return "Sve";
+            }
+            if (boardLabels == null) {
+                return String.valueOf(id);
+            }
+            return boardLabels.stream()
+                    .filter(l -> l.getId().equals(id))
+                    .findFirst()
+                    .map(CardLabel::getName)
+                    .orElse(String.valueOf(id));
+        });
+
+        if (filterState.labelId != null && labelItems.contains(filterState.labelId)) {
+            label.setValue(filterState.labelId);
+        } else {
+            filterState.labelId = null;
+            label.clear();
+        }
+
+        label.addValueChangeListener(e -> {
+            filterState.labelId = e.getValue();
+            refreshColumns.run();
+        });
+
         Checkbox overdue = new Checkbox("Overdue");
         overdue.setValue(filterState.overdueOnly);
         overdue.addValueChangeListener(e -> {
@@ -750,11 +873,13 @@ public class BoardView extends View {
         Button reset = new Button("Reset", e -> {
             filterState.assigneeId = null;
             filterState.priority = null;
+            filterState.labelId = null;
             filterState.overdueOnly = false;
             filterState.titleQuery = "";
 
             assignee.clear();
             pr.clear();
+            label.clear();
             overdue.setValue(false);
             search.clear();
 
@@ -762,7 +887,7 @@ public class BoardView extends View {
         });
         reset.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
 
-        bar.add(assignee, pr, overdue, search, reset, count);
+        bar.add(assignee, pr, label, overdue, search, reset, count);
         bar.setFlexGrow(1, search);
 
         bar.getStyle()
@@ -775,7 +900,7 @@ public class BoardView extends View {
         return bar;
     }
 
-    private boolean matchesFilters(Card c, int listIdx, int totalLists) {
+    private boolean matchesFilters(Card c, int listIdx, int totalLists, Map<Long, List<CardLabel>> labelsByCard) {
         if (filterState.assigneeId != null) {
             if (filterState.assigneeId == -1L) {
                 if (c.getAssignedTo() != null) {
@@ -792,6 +917,14 @@ public class BoardView extends View {
             int p = c.getPriority() == null ? 1 : c.getPriority();
 
             if (!filterState.priority.equals(p)) {
+                return false;
+            }
+        }
+
+        if (filterState.labelId != null) {
+            List<CardLabel> labels = labelsByCard == null ? List.of() : labelsByCard.getOrDefault(c.getId(), List.of());
+            boolean hasLabel = labels.stream().anyMatch(l -> filterState.labelId.equals(l.getId()));
+            if (!hasLabel) {
                 return false;
             }
         }

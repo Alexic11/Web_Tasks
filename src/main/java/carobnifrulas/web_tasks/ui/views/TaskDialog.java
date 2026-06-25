@@ -6,6 +6,7 @@ import carobnifrulas.web_tasks.card.Card;
 import carobnifrulas.web_tasks.card.CardRealtimeBus;
 import carobnifrulas.web_tasks.card.activity.CardActivity;
 import carobnifrulas.web_tasks.card.checklist.CardChecklistItem;
+import carobnifrulas.web_tasks.card.label.CardLabel;
 import carobnifrulas.web_tasks.card.attachment.CardAttachment;
 import carobnifrulas.web_tasks.services.ServicesHolder;
 import carobnifrulas.web_tasks.ui.MainView;
@@ -48,6 +49,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class TaskDialog extends Dialog {
@@ -59,6 +61,9 @@ public class TaskDialog extends Dialog {
     private final Long listId;
     private final Long actorUserId;
     private final Card existing;
+    private final Runnable onTaskChanged;
+    private final boolean hasTaskChangedCallback;
+    private boolean taskChanged = false;
 
     private Grid<CardActivity> activityGrid;
     private Long currentActivityCardId;
@@ -70,25 +75,35 @@ public class TaskDialog extends Dialog {
     private boolean checklistCanWrite;
     private Runnable reloadChecklist;
 
+    private Div labelsWrap;
+    private boolean labelsCanWrite;
+    private Runnable reloadLabels;
+
     private MessageList commentsList;
     private Runnable reloadComments;
 
     private Registration realtimeRegistration;
 
     public static TaskDialog create(ServicesHolder services, Long boardId, Long listId, Long actorUserId) {
-        return new TaskDialog(services, boardId, listId, actorUserId, null);
+        return new TaskDialog(services, boardId, listId, actorUserId, null, null);
     }
 
     public static TaskDialog edit(ServicesHolder services, Card existing, Long actorUserId) {
-        return new TaskDialog(services, existing.getBoardId(), existing.getListId(), actorUserId, existing);
+        return new TaskDialog(services, existing.getBoardId(), existing.getListId(), actorUserId, existing, null);
     }
 
-    private TaskDialog(ServicesHolder services, Long boardId, Long listId, Long actorUserId, Card existing) {
+    public static TaskDialog edit(ServicesHolder services, Card existing, Long actorUserId, Runnable onTaskChanged) {
+        return new TaskDialog(services, existing.getBoardId(), existing.getListId(), actorUserId, existing, onTaskChanged);
+    }
+
+    private TaskDialog(ServicesHolder services, Long boardId, Long listId, Long actorUserId, Card existing, Runnable onTaskChanged) {
         this.services = services;
         this.boardId = boardId;
         this.listId = listId;
         this.actorUserId = actorUserId;
         this.existing = existing;
+        this.hasTaskChangedCallback = onTaskChanged != null;
+        this.onTaskChanged = onTaskChanged == null ? () -> {} : onTaskChanged;
 
         boolean isEdit = existing != null;
 
@@ -102,6 +117,12 @@ public class TaskDialog extends Dialog {
         setHeight("780px");
         setDraggable(true);
         setResizable(true);
+
+        addOpenedChangeListener(e -> {
+            if (!e.isOpened()) {
+                notifyTaskChangedIfNeeded();
+            }
+        });
 
         TextField title = new TextField("Naslov");
         title.setWidthFull();
@@ -202,9 +223,14 @@ public class TaskDialog extends Dialog {
                     );
                 }
 
+                taskChanged = true;
+
                 close();
                 Notification.show("Sačuvano.");
-                MainView.getMainView().setContent(new BoardView(boardId));
+
+                if (!hasTaskChangedCallback) {
+                    MainView.getMainView().setContent(new BoardView(boardId));
+                }
 
             } catch (Exception ex) {
                 Notification.show(ex.getMessage());
@@ -236,6 +262,9 @@ public class TaskDialog extends Dialog {
             return;
         }
 
+        VerticalLayout labelsCard = buildLabelsSection(existing.getId(), canWrite);
+        applyCardStyle(labelsCard);
+
         VerticalLayout checklistCard = buildChecklistSection(existing.getId(), canWrite);
         applyCardStyle(checklistCard);
 
@@ -248,7 +277,7 @@ public class TaskDialog extends Dialog {
         VerticalLayout activityCard = buildActivitySection(existing.getId());
         applyCardStyle(activityCard);
 
-        VerticalLayout root = new VerticalLayout(detailsCard, checklistCard, attachmentsCard, commentsCard, activityCard);
+        VerticalLayout root = new VerticalLayout(detailsCard, labelsCard, checklistCard, attachmentsCard, commentsCard, activityCard);
         root.setPadding(false);
         root.setSpacing(true);
         root.setWidthFull();
@@ -260,6 +289,15 @@ public class TaskDialog extends Dialog {
         add(scroller);
 
         registerRealtime(existing.getId());
+    }
+
+    private void notifyTaskChangedIfNeeded() {
+        if (!taskChanged) {
+            return;
+        }
+
+        taskChanged = false;
+        onTaskChanged.run();
     }
 
     private com.vaadin.flow.component.Component buildSectionHeader(String title, String subtitle) {
@@ -301,6 +339,10 @@ public class TaskDialog extends Dialog {
 
         if (reloadChecklist != null) {
             reloadChecklist.run();
+        }
+
+        if (reloadLabels != null) {
+            reloadLabels.run();
         }
 
         if (reloadComments != null) {
@@ -362,6 +404,219 @@ public class TaskDialog extends Dialog {
         activityGrid.setItems(acts);
     }
 
+    private VerticalLayout buildLabelsSection(Long cardId, boolean canWrite) {
+        this.labelsCanWrite = canWrite;
+
+        VerticalLayout root = new VerticalLayout();
+        root.setPadding(false);
+        root.setSpacing(true);
+        root.setWidthFull();
+
+        Span hint = new Span(
+                canWrite
+                        ? "Dodaj ili označi labele za lakšu organizaciju taskova."
+                        : "Možeš pregledati labele, ali nemaš pravo dodavanja ili izmjena."
+        );
+        hint.getStyle()
+                .set("font-size", "var(--lumo-font-size-s)")
+                .set("color", "var(--lumo-secondary-text-color)");
+
+        labelsWrap = new Div();
+        labelsWrap.setWidthFull();
+        labelsWrap.getStyle()
+                .set("border", "1px solid var(--lumo-contrast-10pct)")
+                .set("border-radius", "12px")
+                .set("padding", "10px")
+                .set("box-sizing", "border-box")
+                .set("background", "white");
+
+        root.add(buildSectionHeader("Labele", "Kategorizacija taska bojama i oznakama."), hint);
+
+        if (canWrite) {
+            TextField newLabel = new TextField();
+            newLabel.setPlaceholder("Nova labela...");
+            newLabel.setWidthFull();
+            newLabel.setClearButtonVisible(true);
+
+            Select<String> color = new Select<>();
+            color.setLabel("Boja");
+            color.setItems("BLUE", "GREEN", "YELLOW", "RED", "PURPLE", "GRAY");
+            color.setValue("BLUE");
+            color.setWidth("180px");
+            color.setItemLabelGenerator(c -> switch (c) {
+                case "GREEN" -> "Zelena";
+                case "YELLOW" -> "Žuta";
+                case "RED" -> "Crvena";
+                case "PURPLE" -> "Ljubičasta";
+                case "GRAY" -> "Siva";
+                default -> "Plava";
+            });
+
+            Button add = new Button("Dodaj labelu", e -> {
+                try {
+                    services.cardLabelService.createAndAssignLabel(
+                            cardId,
+                            actorUserId,
+                            newLabel.getValue(),
+                            color.getValue()
+                    );
+                    taskChanged = true;
+                    newLabel.clear();
+                    color.setValue("BLUE");
+                    refreshLabelsList(cardId, labelsCanWrite);
+                    refreshActivitySection();
+                    Notification.show("Labela je dodana.");
+                } catch (Exception ex) {
+                    Notification.show(ex.getMessage(), 4000, Notification.Position.MIDDLE);
+                }
+            });
+            add.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
+            HorizontalLayout addRow = new HorizontalLayout(newLabel, color, add);
+            addRow.setWidthFull();
+            addRow.setPadding(false);
+            addRow.setSpacing(true);
+            addRow.setDefaultVerticalComponentAlignment(Alignment.END);
+            addRow.setFlexGrow(1, newLabel);
+
+            root.add(addRow);
+        }
+
+        reloadLabels = () -> refreshLabelsList(cardId, labelsCanWrite);
+        reloadLabels.run();
+
+        root.add(labelsWrap);
+        return root;
+    }
+
+    private void refreshLabelsList(Long cardId, boolean canWrite) {
+        if (labelsWrap == null) {
+            return;
+        }
+
+        labelsWrap.removeAll();
+
+        try {
+            List<CardLabel> boardLabels = services.cardLabelService.listLabelsForBoard(boardId, actorUserId);
+            List<CardLabel> assignedLabels = services.cardLabelService.listLabelsForCard(cardId, actorUserId);
+
+            Set<Long> assignedIds = assignedLabels.stream()
+                    .map(CardLabel::getId)
+                    .collect(Collectors.toSet());
+
+            if (boardLabels.isEmpty()) {
+                Span empty = new Span(canWrite
+                        ? "Nema labela na ovom boardu. Dodaj prvu labelu iznad."
+                        : "Nema labela za prikaz.");
+                empty.getStyle().set("color", "var(--lumo-secondary-text-color)");
+                labelsWrap.add(empty);
+                return;
+            }
+
+            VerticalLayout list = new VerticalLayout();
+            list.setPadding(false);
+            list.setSpacing(true);
+            list.setWidthFull();
+
+            int visibleCount = 0;
+
+            for (CardLabel label : boardLabels) {
+                boolean assigned = assignedIds.contains(label.getId());
+
+                if (!canWrite && !assigned) {
+                    continue;
+                }
+
+                visibleCount++;
+
+                Checkbox selected = new Checkbox();
+                selected.setValue(assigned);
+                selected.setEnabled(canWrite);
+
+                selected.addValueChangeListener(e -> {
+                    try {
+                        if (Boolean.TRUE.equals(e.getValue())) {
+                            services.cardLabelService.assignLabel(cardId, actorUserId, label.getId());
+                        } else {
+                            services.cardLabelService.removeLabel(cardId, actorUserId, label.getId());
+                        }
+                        taskChanged = true;
+                        refreshLabelsList(cardId, canWrite);
+                        refreshActivitySection();
+                    } catch (Exception ex) {
+                        Notification.show(ex.getMessage(), 4000, Notification.Position.MIDDLE);
+                        refreshLabelsList(cardId, canWrite);
+                    }
+                });
+
+                HorizontalLayout row = new HorizontalLayout(selected, buildLabelChip(label));
+                row.setPadding(false);
+                row.setSpacing(true);
+                row.setAlignItems(Alignment.CENTER);
+                row.getStyle()
+                        .set("padding", "4px 0")
+                        .set("box-sizing", "border-box");
+
+                list.add(row);
+            }
+
+            if (visibleCount == 0) {
+                Span empty = new Span("Task nema dodijeljene labele.");
+                empty.getStyle().set("color", "var(--lumo-secondary-text-color)");
+                labelsWrap.add(empty);
+            } else {
+                labelsWrap.add(list);
+            }
+        } catch (Exception ex) {
+            Notification.show("Ne mogu učitati labele: " + ex.getMessage(),
+                    4000, Notification.Position.MIDDLE);
+        }
+    }
+
+    private Span buildLabelChip(CardLabel label) {
+        Span chip = new Span(label.getName());
+        chip.getStyle()
+                .set("font-size", "var(--lumo-font-size-s)")
+                .set("font-weight", "700")
+                .set("padding", "3px 10px")
+                .set("border-radius", "999px")
+                .set("background", labelBackground(label.getColor()))
+                .set("color", labelTextColor(label.getColor()))
+                .set("border", "1px solid " + labelBorderColor(label.getColor()));
+        return chip;
+    }
+
+    private static String labelBackground(String color) {
+        return switch (color == null ? "BLUE" : color) {
+            case "GREEN" -> "var(--lumo-success-color-10pct)";
+            case "YELLOW" -> "var(--lumo-warning-color-10pct)";
+            case "RED" -> "var(--lumo-error-color-10pct)";
+            case "PURPLE" -> "var(--lumo-primary-color-10pct)";
+            case "GRAY" -> "var(--lumo-contrast-10pct)";
+            default -> "var(--lumo-primary-color-10pct)";
+        };
+    }
+
+    private static String labelTextColor(String color) {
+        return switch (color == null ? "BLUE" : color) {
+            case "GREEN" -> "var(--lumo-success-text-color)";
+            case "YELLOW" -> "var(--lumo-warning-text-color)";
+            case "RED" -> "var(--lumo-error-text-color)";
+            case "GRAY" -> "var(--lumo-secondary-text-color)";
+            default -> "var(--lumo-primary-text-color)";
+        };
+    }
+
+    private static String labelBorderColor(String color) {
+        return switch (color == null ? "BLUE" : color) {
+            case "GREEN" -> "var(--lumo-success-color-30pct)";
+            case "YELLOW" -> "var(--lumo-warning-color-30pct)";
+            case "RED" -> "var(--lumo-error-color-30pct)";
+            case "GRAY" -> "var(--lumo-contrast-20pct)";
+            default -> "var(--lumo-primary-color-30pct)";
+        };
+    }
+
 
     private VerticalLayout buildChecklistSection(Long cardId, boolean canWrite) {
         this.checklistCanWrite = canWrite;
@@ -389,6 +644,7 @@ public class TaskDialog extends Dialog {
         Button add = new Button("Dodaj", e -> {
             try {
                 services.cardChecklistService.addItem(cardId, actorUserId, newItem.getValue());
+                taskChanged = true;
                 newItem.clear();
                 refreshChecklistList(cardId, checklistCanWrite);
                 refreshActivitySection();
@@ -487,6 +743,7 @@ public class TaskDialog extends Dialog {
                 done.addValueChangeListener(e -> {
                     try {
                         services.cardChecklistService.setDone(item.getId(), actorUserId, Boolean.TRUE.equals(e.getValue()));
+                        taskChanged = true;
                         refreshChecklistList(cardId, canWrite);
                         refreshActivitySection();
                     } catch (Exception ex) {
@@ -514,6 +771,7 @@ public class TaskDialog extends Dialog {
                     delete.addClickListener(e -> {
                         try {
                             services.cardChecklistService.deleteItem(item.getId(), actorUserId);
+                            taskChanged = true;
                             refreshChecklistList(cardId, true);
                             refreshActivitySection();
                             Notification.show("Checklist stavka je obrisana.");

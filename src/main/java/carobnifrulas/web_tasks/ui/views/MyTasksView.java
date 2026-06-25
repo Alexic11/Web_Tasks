@@ -2,6 +2,7 @@ package carobnifrulas.web_tasks.ui.views;
 
 import carobnifrulas.web_tasks.card.Card;
 import carobnifrulas.web_tasks.card.CardRepository;
+import carobnifrulas.web_tasks.card.label.CardLabel;
 import carobnifrulas.web_tasks.ui.MainView;
 import carobnifrulas.web_tasks.ui.menu.MenuTab;
 import com.vaadin.flow.component.Component;
@@ -28,6 +29,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 @org.springframework.stereotype.Component
 public class MyTasksView extends View implements MenuTab {
@@ -36,6 +38,7 @@ public class MyTasksView extends View implements MenuTab {
 
     private final FilterState filterState = new FilterState();
     private List<CardRepository.MyTaskRow> allRows = List.of();
+    private Map<Long, List<CardLabel>> labelsByCard = Map.of();
 
     private Span count;
     private VerticalLayout sectionsWrap;
@@ -167,6 +170,11 @@ public class MyTasksView extends View implements MenuTab {
         if (allRows == null) {
             allRows = List.of();
         }
+
+        List<Long> cardIds = allRows.stream()
+                .map(CardRepository.MyTaskRow::getCardId)
+                .toList();
+        labelsByCard = services.cardLabelService.labelsByCard(cardIds, loggedUser.getId());
     }
 
     private void applyFiltersAndRender() {
@@ -408,13 +416,81 @@ public class MyTasksView extends View implements MenuTab {
                 .set("font-size", "var(--lumo-font-size-s)")
                 .set("color", "var(--lumo-secondary-text-color)");
 
+        Component labels = buildLabelsRow(labelsByCard.getOrDefault(row.getCardId(), List.of()));
+
         HorizontalLayout meta = new HorizontalLayout();
         meta.setSpacing(true);
         meta.setDefaultVerticalComponentAlignment(FlexComponent.Alignment.CENTER);
         meta.add(buildPriorityBadge(row.getPriority()), buildDueLabel(row.getDueAt()));
 
-        card.add(title, board, meta);
+        card.add(title, board, labels, meta);
         return card;
+    }
+
+    private Component buildLabelsRow(List<CardLabel> labels) {
+        FlexLayout row = new FlexLayout();
+        row.setWidthFull();
+        row.setFlexWrap(FlexLayout.FlexWrap.WRAP);
+        row.getStyle().set("gap", "4px");
+
+        if (labels == null || labels.isEmpty()) {
+            Span empty = new Span("Labele: —");
+            empty.getStyle()
+                    .set("font-size", "var(--lumo-font-size-s)")
+                    .set("color", "var(--lumo-secondary-text-color)");
+            row.add(empty);
+            return row;
+        }
+
+        for (CardLabel label : labels) {
+            row.add(buildLabelChip(label));
+        }
+
+        return row;
+    }
+
+    private Span buildLabelChip(CardLabel label) {
+        Span chip = new Span(label.getName());
+        chip.getStyle()
+                .set("font-size", "var(--lumo-font-size-xs)")
+                .set("font-weight", "700")
+                .set("padding", "2px 8px")
+                .set("border-radius", "999px")
+                .set("background", labelBackground(label.getColor()))
+                .set("color", labelTextColor(label.getColor()))
+                .set("border", "1px solid " + labelBorderColor(label.getColor()));
+        return chip;
+    }
+
+    private static String labelBackground(String color) {
+        return switch (color == null ? "BLUE" : color) {
+            case "GREEN" -> "var(--lumo-success-color-10pct)";
+            case "YELLOW" -> "var(--lumo-warning-color-10pct)";
+            case "RED" -> "var(--lumo-error-color-10pct)";
+            case "PURPLE" -> "var(--lumo-primary-color-10pct)";
+            case "GRAY" -> "var(--lumo-contrast-10pct)";
+            default -> "var(--lumo-primary-color-10pct)";
+        };
+    }
+
+    private static String labelTextColor(String color) {
+        return switch (color == null ? "BLUE" : color) {
+            case "GREEN" -> "var(--lumo-success-text-color)";
+            case "YELLOW" -> "var(--lumo-warning-text-color)";
+            case "RED" -> "var(--lumo-error-text-color)";
+            case "GRAY" -> "var(--lumo-secondary-text-color)";
+            default -> "var(--lumo-primary-text-color)";
+        };
+    }
+
+    private static String labelBorderColor(String color) {
+        return switch (color == null ? "BLUE" : color) {
+            case "GREEN" -> "var(--lumo-success-color-30pct)";
+            case "YELLOW" -> "var(--lumo-warning-color-30pct)";
+            case "RED" -> "var(--lumo-error-color-30pct)";
+            case "GRAY" -> "var(--lumo-contrast-20pct)";
+            default -> "var(--lumo-primary-color-30pct)";
+        };
     }
 
     private void openTask(Long cardId) {
