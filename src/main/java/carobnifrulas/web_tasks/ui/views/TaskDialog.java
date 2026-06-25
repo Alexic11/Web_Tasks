@@ -4,6 +4,7 @@ import carobnifrulas.web_tasks.board.BoardMemberRepository;
 import carobnifrulas.web_tasks.board.BoardRole;
 import carobnifrulas.web_tasks.card.Card;
 import carobnifrulas.web_tasks.card.CardRealtimeBus;
+import carobnifrulas.web_tasks.card.TaskVersionConflictException;
 import carobnifrulas.web_tasks.card.activity.CardActivity;
 import carobnifrulas.web_tasks.card.checklist.CardChecklistItem;
 import carobnifrulas.web_tasks.card.label.CardLabel;
@@ -61,6 +62,7 @@ public class TaskDialog extends Dialog {
     private final Long listId;
     private final Long actorUserId;
     private final Card existing;
+    private Long currentCardVersion;
     private final Runnable onTaskChanged;
     private final boolean hasTaskChangedCallback;
     private boolean taskChanged = false;
@@ -106,6 +108,7 @@ public class TaskDialog extends Dialog {
         this.onTaskChanged = onTaskChanged == null ? () -> {} : onTaskChanged;
 
         boolean isEdit = existing != null;
+        this.currentCardVersion = isEdit ? normalizeVersion(existing.getVersion()) : null;
 
         BoardRole myRole = services.boardMemberService.getRole(boardId, actorUserId);
         boolean archived = services.boardService.requireMemberBoard(boardId, actorUserId).getArchivedAt() != null;
@@ -212,15 +215,17 @@ public class TaskDialog extends Dialog {
                             actorUserId
                     );
                 } else {
-                    services.cardService.updateCard(
+                    Card saved = services.cardService.updateCard(
                             existing.getId(),
                             actorUserId,
                             title.getValue(),
                             desc.getValue(),
                             dueVal,
                             pr,
-                            assigneeId
+                            assigneeId,
+                            currentCardVersion
                     );
+                    currentCardVersion = normalizeVersion(saved.getVersion());
                 }
 
                 taskChanged = true;
@@ -233,6 +238,10 @@ public class TaskDialog extends Dialog {
                 }
 
             } catch (Exception ex) {
+                if (isTaskConflict(ex)) {
+                    handleTaskConflict(isEdit ? existing.getId() : null);
+                    return;
+                }
                 Notification.show(ex.getMessage());
             }
         });
@@ -298,6 +307,56 @@ public class TaskDialog extends Dialog {
 
         taskChanged = false;
         onTaskChanged.run();
+    }
+
+    private void refreshCurrentCardVersion(Long cardId) {
+        if (cardId == null) {
+            currentCardVersion = null;
+            return;
+        }
+
+        currentCardVersion = normalizeVersion(services.cardService.requireById(cardId).getVersion());
+    }
+
+    private void handleTaskConflict(Long cardId) {
+        Notification.show(
+                "Task je u međuvremenu promijenjen od strane drugog korisnika. Osvježavam prikaz taska.",
+                6000,
+                Notification.Position.MIDDLE
+        );
+
+        if (cardId != null) {
+            try {
+                refreshCurrentCardVersion(cardId);
+                refreshAllSections();
+            } catch (Exception ignored) {
+                // Ako je task obrisan ili više nije dostupan, samo zatvaramo dialog i osvježavamo board.
+            }
+        }
+
+        taskChanged = true;
+        close();
+    }
+
+    private static boolean isTaskConflict(Throwable ex) {
+        Throwable t = ex;
+        while (t != null) {
+            if (t instanceof TaskVersionConflictException) {
+                return true;
+            }
+
+            String className = t.getClass().getName();
+            if (className.contains("OptimisticLock") || className.contains("StaleObjectState")) {
+                return true;
+            }
+
+            t = t.getCause();
+        }
+        return false;
+    }
+
+    private static Long normalizeVersion(Long version) {
+        return version == null ? 0L : version;
     }
 
     private com.vaadin.flow.component.Component buildSectionHeader(String title, String subtitle) {
@@ -458,8 +517,10 @@ public class TaskDialog extends Dialog {
                             cardId,
                             actorUserId,
                             newLabel.getValue(),
-                            color.getValue()
+                            color.getValue(),
+                            currentCardVersion
                     );
+                    refreshCurrentCardVersion(cardId);
                     taskChanged = true;
                     newLabel.clear();
                     color.setValue("BLUE");
@@ -467,6 +528,10 @@ public class TaskDialog extends Dialog {
                     refreshActivitySection();
                     Notification.show("Labela je dodana.");
                 } catch (Exception ex) {
+                    if (isTaskConflict(ex)) {
+                        handleTaskConflict(cardId);
+                        return;
+                    }
                     Notification.show(ex.getMessage(), 4000, Notification.Position.MIDDLE);
                 }
             });
@@ -536,14 +601,19 @@ public class TaskDialog extends Dialog {
                 selected.addValueChangeListener(e -> {
                     try {
                         if (Boolean.TRUE.equals(e.getValue())) {
-                            services.cardLabelService.assignLabel(cardId, actorUserId, label.getId());
+                            services.cardLabelService.assignLabel(cardId, actorUserId, label.getId(), currentCardVersion);
                         } else {
-                            services.cardLabelService.removeLabel(cardId, actorUserId, label.getId());
+                            services.cardLabelService.removeLabel(cardId, actorUserId, label.getId(), currentCardVersion);
                         }
+                        refreshCurrentCardVersion(cardId);
                         taskChanged = true;
                         refreshLabelsList(cardId, canWrite);
                         refreshActivitySection();
                     } catch (Exception ex) {
+                        if (isTaskConflict(ex)) {
+                            handleTaskConflict(cardId);
+                            return;
+                        }
                         Notification.show(ex.getMessage(), 4000, Notification.Position.MIDDLE);
                         refreshLabelsList(cardId, canWrite);
                     }
@@ -643,13 +713,18 @@ public class TaskDialog extends Dialog {
 
         Button add = new Button("Dodaj", e -> {
             try {
-                services.cardChecklistService.addItem(cardId, actorUserId, newItem.getValue());
+                services.cardChecklistService.addItem(cardId, actorUserId, newItem.getValue(), currentCardVersion);
+                refreshCurrentCardVersion(cardId);
                 taskChanged = true;
                 newItem.clear();
                 refreshChecklistList(cardId, checklistCanWrite);
                 refreshActivitySection();
                 Notification.show("Checklist stavka je dodana.");
             } catch (Exception ex) {
+                if (isTaskConflict(ex)) {
+                    handleTaskConflict(cardId);
+                    return;
+                }
                 Notification.show(ex.getMessage(), 4000, Notification.Position.MIDDLE);
             }
         });
@@ -742,11 +817,16 @@ public class TaskDialog extends Dialog {
 
                 done.addValueChangeListener(e -> {
                     try {
-                        services.cardChecklistService.setDone(item.getId(), actorUserId, Boolean.TRUE.equals(e.getValue()));
+                        services.cardChecklistService.setDone(item.getId(), actorUserId, Boolean.TRUE.equals(e.getValue()), currentCardVersion);
+                        refreshCurrentCardVersion(cardId);
                         taskChanged = true;
                         refreshChecklistList(cardId, canWrite);
                         refreshActivitySection();
                     } catch (Exception ex) {
+                        if (isTaskConflict(ex)) {
+                            handleTaskConflict(cardId);
+                            return;
+                        }
                         Notification.show(ex.getMessage(), 4000, Notification.Position.MIDDLE);
                         refreshChecklistList(cardId, canWrite);
                     }
@@ -770,12 +850,17 @@ public class TaskDialog extends Dialog {
                     delete.addThemeVariants(ButtonVariant.LUMO_ERROR);
                     delete.addClickListener(e -> {
                         try {
-                            services.cardChecklistService.deleteItem(item.getId(), actorUserId);
+                            services.cardChecklistService.deleteItem(item.getId(), actorUserId, currentCardVersion);
+                            refreshCurrentCardVersion(cardId);
                             taskChanged = true;
                             refreshChecklistList(cardId, true);
                             refreshActivitySection();
                             Notification.show("Checklist stavka je obrisana.");
                         } catch (Exception ex) {
+                            if (isTaskConflict(ex)) {
+                                handleTaskConflict(cardId);
+                                return;
+                            }
                             Notification.show(ex.getMessage(), 4000, Notification.Position.MIDDLE);
                         }
                     });

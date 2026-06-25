@@ -7,9 +7,12 @@ import carobnifrulas.web_tasks.board.BoardRealtimeBus;
 import carobnifrulas.web_tasks.card.Card;
 import carobnifrulas.web_tasks.card.CardRepository;
 import carobnifrulas.web_tasks.card.CardRealtimeBus;
+import carobnifrulas.web_tasks.card.TaskVersionConflictException;
 import carobnifrulas.web_tasks.card.activity.CardActivityService;
 import carobnifrulas.web_tasks.security.model.AppUserService;
 import carobnifrulas.web_tasks.security.model.SecurityUtils;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,6 +32,7 @@ public class CardLabelService {
     private final BoardMemberService boardMemberService;
     private final AppUserService userService;
     private final CardActivityService activity;
+    private final EntityManager entityManager;
 
     public CardLabelService(CardLabelRepository labels,
                             CardLabelAssignmentRepository assignments,
@@ -36,7 +40,8 @@ public class CardLabelService {
                             BoardRepository boards,
                             BoardMemberService boardMemberService,
                             AppUserService userService,
-                            CardActivityService activity) {
+                            CardActivityService activity,
+                            EntityManager entityManager) {
         this.labels = labels;
         this.assignments = assignments;
         this.cards = cards;
@@ -44,6 +49,7 @@ public class CardLabelService {
         this.boardMemberService = boardMemberService;
         this.userService = userService;
         this.activity = activity;
+        this.entityManager = entityManager;
     }
 
     @Transactional(readOnly = true)
@@ -118,7 +124,14 @@ public class CardLabelService {
 
     @Transactional
     public void assignLabel(Long cardId, Long actorUserId, Long labelId) {
+        assignLabel(cardId, actorUserId, labelId, null);
+    }
+
+    @Transactional
+    public void assignLabel(Long cardId, Long actorUserId, Long labelId, Long expectedCardVersion) {
         Card c = requireCardWritable(cardId, actorUserId);
+        requireExpectedVersion(c, expectedCardVersion);
+
         CardLabel label = labels.findById(labelId)
                 .orElseThrow(() -> new IllegalStateException("Labela ne postoji."));
 
@@ -135,6 +148,8 @@ public class CardLabelService {
         a.setCreatedBy(actorUserId);
         assignments.save(a);
 
+        forceIncrementCardVersion(c);
+
         activity.logLabelAssigned(cardId, actorUserId, label.getName());
         CardRealtimeBus.publish(cardId, CardRealtimeBus.ChangeType.ALL);
         BoardRealtimeBus.publish(c.getBoardId(), BoardRealtimeBus.ChangeType.LABELS);
@@ -142,15 +157,29 @@ public class CardLabelService {
 
     @Transactional
     public CardLabel createAndAssignLabel(Long cardId, Long actorUserId, String name, String color) {
+        return createAndAssignLabel(cardId, actorUserId, name, color, null);
+    }
+
+    @Transactional
+    public CardLabel createAndAssignLabel(Long cardId, Long actorUserId, String name, String color, Long expectedCardVersion) {
         Card c = requireCardWritable(cardId, actorUserId);
+        requireExpectedVersion(c, expectedCardVersion);
+
         CardLabel label = createLabel(c.getBoardId(), actorUserId, name, color);
-        assignLabel(cardId, actorUserId, label.getId());
+        assignLabel(cardId, actorUserId, label.getId(), expectedCardVersion);
         return label;
     }
 
     @Transactional
     public void removeLabel(Long cardId, Long actorUserId, Long labelId) {
+        removeLabel(cardId, actorUserId, labelId, null);
+    }
+
+    @Transactional
+    public void removeLabel(Long cardId, Long actorUserId, Long labelId, Long expectedCardVersion) {
         Card c = requireCardWritable(cardId, actorUserId);
+        requireExpectedVersion(c, expectedCardVersion);
+
         CardLabel label = labels.findById(labelId)
                 .orElseThrow(() -> new IllegalStateException("Labela ne postoji."));
 
@@ -159,6 +188,8 @@ public class CardLabelService {
         }
 
         assignments.deleteByIdCardIdAndIdLabelId(cardId, labelId);
+        forceIncrementCardVersion(c);
+
         activity.logLabelRemoved(cardId, actorUserId, label.getName());
         CardRealtimeBus.publish(cardId, CardRealtimeBus.ChangeType.ALL);
         BoardRealtimeBus.publish(c.getBoardId(), BoardRealtimeBus.ChangeType.LABELS);
@@ -173,6 +204,26 @@ public class CardLabelService {
         assignments.deleteByIdLabelId(labelId);
         labels.delete(label);
         BoardRealtimeBus.publish(label.getBoardId(), BoardRealtimeBus.ChangeType.LABELS);
+    }
+
+    private static void requireExpectedVersion(Card card, Long expectedVersion) {
+        if (expectedVersion == null) {
+            return;
+        }
+
+        Long currentVersion = card.getVersion();
+        long current = currentVersion == null ? 0L : currentVersion;
+        long expected = expectedVersion;
+
+        if (current != expected) {
+            throw new TaskVersionConflictException(
+                    "Task je u međuvremenu promijenjen od strane drugog korisnika. Osvježi task i pokušaj ponovo."
+            );
+        }
+    }
+
+    private void forceIncrementCardVersion(Card card) {
+        entityManager.lock(card, LockModeType.OPTIMISTIC_FORCE_INCREMENT);
     }
 
     private Card requireCardAndAccess(Long cardId, Long actorUserId) {

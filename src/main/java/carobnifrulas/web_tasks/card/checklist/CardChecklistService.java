@@ -6,10 +6,13 @@ import carobnifrulas.web_tasks.board.BoardRealtimeBus;
 import carobnifrulas.web_tasks.card.Card;
 import carobnifrulas.web_tasks.card.CardRealtimeBus;
 import carobnifrulas.web_tasks.card.CardRepository;
+import carobnifrulas.web_tasks.card.TaskVersionConflictException;
 import carobnifrulas.web_tasks.card.activity.CardActivityService;
 import carobnifrulas.web_tasks.security.model.SecurityUtils;
 import carobnifrulas.web_tasks.user.User;
 import carobnifrulas.web_tasks.user.UserRepository;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,17 +30,20 @@ public class CardChecklistService {
     private final UserRepository users;
     private final BoardMemberService boardMemberService;
     private final CardActivityService activityService;
+    private final EntityManager entityManager;
 
     public CardChecklistService(CardChecklistRepository checklistRepository,
                                 CardRepository cardRepository,
                                 UserRepository users,
                                 BoardMemberService boardMemberService,
-                                CardActivityService activityService) {
+                                CardActivityService activityService,
+                                EntityManager entityManager) {
         this.checklistRepository = checklistRepository;
         this.cardRepository = cardRepository;
         this.users = users;
         this.boardMemberService = boardMemberService;
         this.activityService = activityService;
+        this.entityManager = entityManager;
     }
 
     @Transactional(readOnly = true)
@@ -72,7 +78,13 @@ public class CardChecklistService {
 
     @Transactional
     public CardChecklistItem addItem(Long cardId, Long actorUserId, String title) {
+        return addItem(cardId, actorUserId, title, null);
+    }
+
+    @Transactional
+    public CardChecklistItem addItem(Long cardId, Long actorUserId, String title, Long expectedCardVersion) {
         Card card = requireCard(cardId);
+        requireExpectedVersion(card, expectedCardVersion);
         requireWriteAccess(card.getBoardId(), actorUserId);
 
         String normalizedTitle = normalizeTitle(title);
@@ -88,6 +100,7 @@ public class CardChecklistService {
         item.setCreatedBy(actorUserId);
 
         CardChecklistItem saved = checklistRepository.save(item);
+        forceIncrementCardVersion(card);
 
         activityService.logChecklistAdded(cardId, actorUserId, saved.getTitle());
         CardRealtimeBus.publish(cardId, CardRealtimeBus.ChangeType.ALL);
@@ -98,8 +111,14 @@ public class CardChecklistService {
 
     @Transactional
     public CardChecklistItem setDone(Long itemId, Long actorUserId, boolean done) {
+        return setDone(itemId, actorUserId, done, null);
+    }
+
+    @Transactional
+    public CardChecklistItem setDone(Long itemId, Long actorUserId, boolean done, Long expectedCardVersion) {
         CardChecklistItem item = requireItem(itemId);
         Card card = requireCard(item.getCardId());
+        requireExpectedVersion(card, expectedCardVersion);
         requireWriteAccess(card.getBoardId(), actorUserId);
 
         boolean oldDone = item.isDone();
@@ -117,6 +136,7 @@ public class CardChecklistService {
         }
 
         CardChecklistItem saved = checklistRepository.save(item);
+        forceIncrementCardVersion(card);
 
         activityService.logChecklistStatusChanged(card.getId(), actorUserId, saved.getTitle(), done);
         CardRealtimeBus.publish(card.getId(), CardRealtimeBus.ChangeType.ALL);
@@ -127,16 +147,43 @@ public class CardChecklistService {
 
     @Transactional
     public void deleteItem(Long itemId, Long actorUserId) {
+        deleteItem(itemId, actorUserId, null);
+    }
+
+    @Transactional
+    public void deleteItem(Long itemId, Long actorUserId, Long expectedCardVersion) {
         CardChecklistItem item = requireItem(itemId);
         Card card = requireCard(item.getCardId());
+        requireExpectedVersion(card, expectedCardVersion);
         requireWriteAccess(card.getBoardId(), actorUserId);
 
         String title = item.getTitle();
         checklistRepository.delete(item);
+        forceIncrementCardVersion(card);
 
         activityService.logChecklistDeleted(card.getId(), actorUserId, title);
         CardRealtimeBus.publish(card.getId(), CardRealtimeBus.ChangeType.ALL);
         BoardRealtimeBus.publish(card.getBoardId(), BoardRealtimeBus.ChangeType.CHECKLIST);
+    }
+
+    private static void requireExpectedVersion(Card card, Long expectedVersion) {
+        if (expectedVersion == null) {
+            return;
+        }
+
+        Long currentVersion = card.getVersion();
+        long current = currentVersion == null ? 0L : currentVersion;
+        long expected = expectedVersion;
+
+        if (current != expected) {
+            throw new TaskVersionConflictException(
+                    "Task je u međuvremenu promijenjen od strane drugog korisnika. Osvježi task i pokušaj ponovo."
+            );
+        }
+    }
+
+    private void forceIncrementCardVersion(Card card) {
+        entityManager.lock(card, LockModeType.OPTIMISTIC_FORCE_INCREMENT);
     }
 
     private CardChecklistItem requireItem(Long itemId) {

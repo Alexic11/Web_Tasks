@@ -190,8 +190,21 @@ public class CardService {
                            LocalDateTime dueAt,
                            Integer priority,
                            Long assignedToUserId) {
+        return updateCard(cardId, actorUserId, title, description, dueAt, priority, assignedToUserId, null);
+    }
+
+    @Transactional
+    public Card updateCard(Long cardId,
+                           Long actorUserId,
+                           String title,
+                           String description,
+                           LocalDateTime dueAt,
+                           Integer priority,
+                           Long assignedToUserId,
+                           Long expectedVersion) {
 
         Card c = requireById(cardId);
+        requireExpectedVersion(c, expectedVersion);
 
         if (!canWriteOrGlobalAdmin(c.getBoardId(), actorUserId)) {
             throw new IllegalStateException("Nemaš prava da uređuješ task na ovom boardu.");
@@ -359,6 +372,22 @@ public class CardService {
     public long countOpenTasks(Long boardId) {
         Long doneListId = lists.requireLastListId(boardId);
         return cards.countOpenInBoard(boardId, doneListId);
+    }
+
+    private static void requireExpectedVersion(Card card, Long expectedVersion) {
+        if (expectedVersion == null) {
+            return;
+        }
+
+        Long currentVersion = card.getVersion();
+        long current = currentVersion == null ? 0L : currentVersion;
+        long expected = expectedVersion;
+
+        if (current != expected) {
+            throw new TaskVersionConflictException(
+                    "Task je u međuvremenu promijenjen od strane drugog korisnika. Osvježi task i pokušaj ponovo."
+            );
+        }
     }
 
     private boolean isGlobalAdmin(Long userId) {

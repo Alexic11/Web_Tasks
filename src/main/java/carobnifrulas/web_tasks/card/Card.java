@@ -16,6 +16,10 @@ public class Card {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
+
     @Column(name = "board_id", nullable = false)
     private Long boardId;
 
