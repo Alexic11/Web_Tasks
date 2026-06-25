@@ -3,6 +3,7 @@ package carobnifrulas.web_tasks.services;
 import carobnifrulas.web_tasks.board.BoardMemberService;
 import carobnifrulas.web_tasks.board.BoardService;
 import carobnifrulas.web_tasks.card.CardService;
+import carobnifrulas.web_tasks.card.checklist.CardChecklistService;
 import carobnifrulas.web_tasks.card.activity.CardActivityService;
 import carobnifrulas.web_tasks.card.attachment.CardAttachmentService;
 import carobnifrulas.web_tasks.card.comment.CardCommentService;
@@ -23,6 +24,7 @@ public class ServicesHolder {
     public final CardActivityService cardActivityService;
     public final CardCommentService cardCommentService;
     public final CardAttachmentService cardAttachmentService;
+    public final CardChecklistService cardChecklistService;
     public final NotificationService notificationService;
 
     public final Menu menu;
@@ -35,6 +37,7 @@ public class ServicesHolder {
                           CardActivityService cardActivityService,
                           CardCommentService cardCommentService,
                           CardAttachmentService cardAttachmentService,
+                          CardChecklistService cardChecklistService,
                           NotificationService notificationService,
                           Menu menu) {
         this.userService = userService;
@@ -45,6 +48,7 @@ public class ServicesHolder {
         this.cardActivityService = cardActivityService;
         this.cardCommentService = cardCommentService;
         this.cardAttachmentService = cardAttachmentService;
+        this.cardChecklistService = cardChecklistService;
         this.notificationService = notificationService;
         this.menu = menu;
     }

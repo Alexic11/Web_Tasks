@@ -5,12 +5,14 @@ import carobnifrulas.web_tasks.board.BoardRole;
 import carobnifrulas.web_tasks.card.Card;
 import carobnifrulas.web_tasks.card.CardRealtimeBus;
 import carobnifrulas.web_tasks.card.activity.CardActivity;
+import carobnifrulas.web_tasks.card.checklist.CardChecklistItem;
 import carobnifrulas.web_tasks.card.attachment.CardAttachment;
 import carobnifrulas.web_tasks.services.ServicesHolder;
 import carobnifrulas.web_tasks.ui.MainView;
 import carobnifrulas.web_tasks.user.User;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
+import com.vaadin.flow.component.checkbox.Checkbox;
 import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.datetimepicker.DateTimePicker;
 import com.vaadin.flow.component.dialog.Dialog;
@@ -64,6 +66,10 @@ public class TaskDialog extends Dialog {
     private Div attachmentsFilesWrap;
     private boolean attachmentsCanWrite;
 
+    private Div checklistItemsWrap;
+    private boolean checklistCanWrite;
+    private Runnable reloadChecklist;
+
     private MessageList commentsList;
     private Runnable reloadComments;
 
@@ -87,7 +93,8 @@ public class TaskDialog extends Dialog {
         boolean isEdit = existing != null;
 
         BoardRole myRole = services.boardMemberService.getRole(boardId, actorUserId);
-        boolean canWrite = myRole != BoardRole.VIEWER;
+        boolean archived = services.boardService.requireMemberBoard(boardId, actorUserId).getArchivedAt() != null;
+        boolean canWrite = myRole != BoardRole.VIEWER && !archived;
 
         setHeaderTitle(isEdit ? "Uredi task" : "Novi task");
         setWidth("1040px");
@@ -229,6 +236,9 @@ public class TaskDialog extends Dialog {
             return;
         }
 
+        VerticalLayout checklistCard = buildChecklistSection(existing.getId(), canWrite);
+        applyCardStyle(checklistCard);
+
         VerticalLayout attachmentsCard = buildAttachmentsSection(existing.getId(), canWrite);
         applyCardStyle(attachmentsCard);
 
@@ -238,7 +248,7 @@ public class TaskDialog extends Dialog {
         VerticalLayout activityCard = buildActivitySection(existing.getId());
         applyCardStyle(activityCard);
 
-        VerticalLayout root = new VerticalLayout(detailsCard, attachmentsCard, commentsCard, activityCard);
+        VerticalLayout root = new VerticalLayout(detailsCard, checklistCard, attachmentsCard, commentsCard, activityCard);
         root.setPadding(false);
         root.setSpacing(true);
         root.setWidthFull();
@@ -287,6 +297,10 @@ public class TaskDialog extends Dialog {
 
         if (attachmentsFilesWrap != null && currentActivityCardId != null) {
             refreshAttachmentsList(attachmentsFilesWrap, currentActivityCardId, attachmentsCanWrite);
+        }
+
+        if (reloadChecklist != null) {
+            reloadChecklist.run();
         }
 
         if (reloadComments != null) {
@@ -346,6 +360,178 @@ public class TaskDialog extends Dialog {
 
         List<CardActivity> acts = services.cardActivityService.listForCard(currentActivityCardId);
         activityGrid.setItems(acts);
+    }
+
+
+    private VerticalLayout buildChecklistSection(Long cardId, boolean canWrite) {
+        this.checklistCanWrite = canWrite;
+
+        VerticalLayout root = new VerticalLayout();
+        root.setPadding(false);
+        root.setSpacing(true);
+        root.setWidthFull();
+
+        Span hint = new Span(
+                canWrite
+                        ? "Dodaj manje korake koje treba završiti unutar ovog taska."
+                        : "Možeš pregledati checklist, ali nemaš pravo dodavanja ili izmjena."
+        );
+        hint.getStyle()
+                .set("font-size", "var(--lumo-font-size-s)")
+                .set("color", "var(--lumo-secondary-text-color)");
+
+        TextField newItem = new TextField();
+        newItem.setPlaceholder("Nova checklist stavka...");
+        newItem.setWidthFull();
+        newItem.setClearButtonVisible(true);
+        newItem.setEnabled(canWrite);
+
+        Button add = new Button("Dodaj", e -> {
+            try {
+                services.cardChecklistService.addItem(cardId, actorUserId, newItem.getValue());
+                newItem.clear();
+                refreshChecklistList(cardId, checklistCanWrite);
+                refreshActivitySection();
+                Notification.show("Checklist stavka je dodana.");
+            } catch (Exception ex) {
+                Notification.show(ex.getMessage(), 4000, Notification.Position.MIDDLE);
+            }
+        });
+        add.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+        add.setEnabled(canWrite);
+
+        HorizontalLayout addRow = new HorizontalLayout(newItem, add);
+        addRow.setWidthFull();
+        addRow.setPadding(false);
+        addRow.setSpacing(true);
+        addRow.setDefaultVerticalComponentAlignment(Alignment.END);
+        addRow.setFlexGrow(1, newItem);
+
+        checklistItemsWrap = new Div();
+        checklistItemsWrap.setWidthFull();
+        checklistItemsWrap.getStyle()
+                .set("border", "1px solid var(--lumo-contrast-10pct)")
+                .set("border-radius", "12px")
+                .set("padding", "10px")
+                .set("box-sizing", "border-box")
+                .set("overflow", "hidden")
+                .set("background", "white");
+
+        reloadChecklist = () -> refreshChecklistList(cardId, checklistCanWrite);
+        reloadChecklist.run();
+
+        root.add(
+                buildSectionHeader("Checklist", "Manji koraci i podzadaci unutar taska."),
+                hint,
+                addRow,
+                checklistItemsWrap
+        );
+
+        return root;
+    }
+
+    private void refreshChecklistList(Long cardId, boolean canWrite) {
+        if (checklistItemsWrap == null) {
+            return;
+        }
+
+        checklistItemsWrap.removeAll();
+
+        try {
+            List<CardChecklistItem> items = services.cardChecklistService.listForCard(cardId, actorUserId);
+
+            if (items.isEmpty()) {
+                Span empty = new Span("Nema checklist stavki.");
+                empty.getStyle().set("color", "var(--lumo-secondary-text-color)");
+                checklistItemsWrap.add(empty);
+                return;
+            }
+
+            long doneCount = items.stream().filter(CardChecklistItem::isDone).count();
+
+            Span progress = new Span("Završeno: " + doneCount + " / " + items.size());
+            progress.getStyle()
+                    .set("font-size", "var(--lumo-font-size-s)")
+                    .set("font-weight", "700")
+                    .set("display", "block")
+                    .set("margin-bottom", "8px");
+            checklistItemsWrap.add(progress);
+
+            for (CardChecklistItem item : items) {
+                HorizontalLayout row = new HorizontalLayout();
+                row.setWidthFull();
+                row.setPadding(false);
+                row.setSpacing(true);
+                row.setAlignItems(Alignment.CENTER);
+                row.setJustifyContentMode(JustifyContentMode.BETWEEN);
+                row.getStyle()
+                        .set("padding", "8px 0")
+                        .set("border-bottom", "1px solid var(--lumo-contrast-10pct)")
+                        .set("box-sizing", "border-box");
+
+                Checkbox done = new Checkbox();
+                done.setValue(item.isDone());
+                done.setEnabled(canWrite);
+
+                Span title = new Span(item.getTitle());
+                title.getStyle()
+                        .set("font-size", "var(--lumo-font-size-s)")
+                        .set("word-break", "break-word");
+
+                if (item.isDone()) {
+                    title.getStyle()
+                            .set("text-decoration", "line-through")
+                            .set("color", "var(--lumo-secondary-text-color)");
+                }
+
+                done.addValueChangeListener(e -> {
+                    try {
+                        services.cardChecklistService.setDone(item.getId(), actorUserId, Boolean.TRUE.equals(e.getValue()));
+                        refreshChecklistList(cardId, canWrite);
+                        refreshActivitySection();
+                    } catch (Exception ex) {
+                        Notification.show(ex.getMessage(), 4000, Notification.Position.MIDDLE);
+                        refreshChecklistList(cardId, canWrite);
+                    }
+                });
+
+                HorizontalLayout left = new HorizontalLayout(done, title);
+                left.setPadding(false);
+                left.setSpacing(true);
+                left.setAlignItems(Alignment.CENTER);
+                left.setWidthFull();
+                left.expand(title);
+
+                HorizontalLayout actions = new HorizontalLayout();
+                actions.setPadding(false);
+                actions.setSpacing(true);
+                actions.setAlignItems(Alignment.CENTER);
+                actions.getStyle().set("flex-shrink", "0");
+
+                if (canWrite) {
+                    Button delete = new Button("Obriši");
+                    delete.addThemeVariants(ButtonVariant.LUMO_ERROR);
+                    delete.addClickListener(e -> {
+                        try {
+                            services.cardChecklistService.deleteItem(item.getId(), actorUserId);
+                            refreshChecklistList(cardId, true);
+                            refreshActivitySection();
+                            Notification.show("Checklist stavka je obrisana.");
+                        } catch (Exception ex) {
+                            Notification.show(ex.getMessage(), 4000, Notification.Position.MIDDLE);
+                        }
+                    });
+                    actions.add(delete);
+                }
+
+                row.add(left, actions);
+                row.expand(left);
+                checklistItemsWrap.add(row);
+            }
+        } catch (Exception ex) {
+            Notification.show("Ne mogu učitati checklist: " + ex.getMessage(),
+                    4000, Notification.Position.MIDDLE);
+        }
     }
 
     private VerticalLayout buildCommentsSection(Long cardId, boolean canWrite) {

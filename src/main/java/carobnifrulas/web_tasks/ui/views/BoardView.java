@@ -3,6 +3,7 @@ package carobnifrulas.web_tasks.ui.views;
 import carobnifrulas.web_tasks.board.BoardMemberRepository;
 import carobnifrulas.web_tasks.board.BoardRole;
 import carobnifrulas.web_tasks.card.Card;
+import carobnifrulas.web_tasks.card.checklist.CardChecklistService;
 import carobnifrulas.web_tasks.list.ListEntity;
 import carobnifrulas.web_tasks.ui.MainView;
 import com.vaadin.flow.component.button.Button;
@@ -158,6 +159,14 @@ public class BoardView extends View {
 
                 int totalCount = cardsByList.values().stream().mapToInt(List::size).sum();
 
+                List<Long> cardIds = cardsByList.values().stream()
+                        .flatMap(List::stream)
+                        .map(Card::getId)
+                        .toList();
+
+                Map<Long, CardChecklistService.ChecklistStats> checklistStats =
+                        services.cardChecklistService.statsForCards(cardIds);
+
                 int matchCount = 0;
                 for (int i = 0; i < lists.size(); i++) {
                     Long listId = lists.get(i).getId();
@@ -172,7 +181,7 @@ public class BoardView extends View {
 
                 for (int i = 0; i < lists.size(); i++) {
                     ListEntity list = lists.get(i);
-                    columns.add(buildColumn(list, lists, i, canWrite, assigneeLabel, cardsByList));
+                    columns.add(buildColumn(list, lists, i, canWrite, assigneeLabel, cardsByList, checklistStats));
                 }
             } catch (Exception ex) {
                 Notification.show(ex.getMessage());
@@ -326,7 +335,8 @@ public class BoardView extends View {
                                                             int idx,
                                                             boolean canWrite,
                                                             Map<Long, String> assigneeLabel,
-                                                            Map<Long, List<Card>> cardsByList) {
+                                                            Map<Long, List<Card>> cardsByList,
+                                                            Map<Long, CardChecklistService.ChecklistStats> checklistStats) {
 
         VerticalLayout col = new VerticalLayout();
         col.setPadding(false);
@@ -412,7 +422,7 @@ public class BoardView extends View {
                 continue;
             }
 
-            col.add(renderCard(c, list.getId(), allLists, idx, canWrite, assigneeLabel));
+            col.add(renderCard(c, list.getId(), allLists, idx, canWrite, assigneeLabel, checklistStats));
         }
 
         return col;
@@ -423,7 +433,8 @@ public class BoardView extends View {
                                                            List<ListEntity> allLists,
                                                            int idx,
                                                            boolean canWrite,
-                                                           Map<Long, String> assigneeLabel) {
+                                                           Map<Long, String> assigneeLabel,
+                                                           Map<Long, CardChecklistService.ChecklistStats> checklistStats) {
 
         VerticalLayout box = new VerticalLayout();
         box.setPadding(false);
@@ -499,8 +510,9 @@ public class BoardView extends View {
 
         Span priority = buildPriorityBadge(c.getPriority());
         Span due = buildDueLabel(c.getDueAt());
+        Span checklist = buildChecklistBadge(checklistStats == null ? null : checklistStats.get(c.getId()));
 
-        HorizontalLayout meta = new HorizontalLayout(priority, due);
+        HorizontalLayout meta = new HorizontalLayout(priority, due, checklist);
         meta.setSpacing(true);
         meta.setDefaultVerticalComponentAlignment(FlexComponent.Alignment.CENTER);
 
@@ -571,6 +583,34 @@ public class BoardView extends View {
 
         box.add(title, assignee, meta, actions);
         return box;
+    }
+
+    private Span buildChecklistBadge(CardChecklistService.ChecklistStats stats) {
+        if (stats == null || !stats.hasItems()) {
+            Span empty = new Span("Checklist: —");
+            empty.getStyle()
+                    .set("font-size", "var(--lumo-font-size-s)")
+                    .set("padding", "2px 10px")
+                    .set("border-radius", "999px")
+                    .set("background", "var(--lumo-contrast-5pct)")
+                    .set("color", "var(--lumo-secondary-text-color)");
+            return empty;
+        }
+
+        Span badge = new Span("Checklist: " + stats.done() + "/" + stats.total() + " (" + stats.percent() + "%)");
+        badge.getStyle()
+                .set("font-size", "var(--lumo-font-size-s)")
+                .set("padding", "2px 10px")
+                .set("border-radius", "999px")
+                .set("font-weight", "600")
+                .set("background", stats.done() == stats.total()
+                        ? "var(--lumo-success-color-10pct)"
+                        : "var(--lumo-primary-color-10pct)")
+                .set("color", stats.done() == stats.total()
+                        ? "var(--lumo-success-text-color)"
+                        : "var(--lumo-primary-text-color)");
+
+        return badge;
     }
 
     private Span buildPriorityBadge(Integer p) {

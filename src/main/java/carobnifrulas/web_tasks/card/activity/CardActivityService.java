@@ -23,6 +23,10 @@ public class CardActivityService {
     public static final String DONE = "DONE";
     public static final String UPDATED = "UPDATED";
     public static final String COMMENTED = "COMMENTED";
+    public static final String CHECKLIST_ADDED = "CHECKLIST_ADDED";
+    public static final String CHECKLIST_DONE = "CHECKLIST_DONE";
+    public static final String CHECKLIST_REOPENED = "CHECKLIST_REOPENED";
+    public static final String CHECKLIST_DELETED = "CHECKLIST_DELETED";
 
     private static final DateTimeFormatter DTF = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
 
@@ -87,6 +91,23 @@ public class CardActivityService {
         log(cardId, actorUserId, COMMENTED, null, preview);
     }
 
+    @Transactional
+    public void logChecklistAdded(Long cardId, Long actorUserId, String title) {
+        log(cardId, actorUserId, CHECKLIST_ADDED, null, preview(title));
+    }
+
+    @Transactional
+    public void logChecklistStatusChanged(Long cardId, Long actorUserId, String title, boolean done) {
+        log(cardId, actorUserId, done ? CHECKLIST_DONE : CHECKLIST_REOPENED,
+                preview(title),
+                done ? "DONE" : "OPEN");
+    }
+
+    @Transactional
+    public void logChecklistDeleted(Long cardId, Long actorUserId, String title) {
+        log(cardId, actorUserId, CHECKLIST_DELETED, preview(title), null);
+    }
+
     private void log(Long cardId, Long actorUserId, String action, String oldValue, String newValue) {
         CardActivity a = new CardActivity();
         a.setCardId(cardId);
@@ -126,6 +147,14 @@ public class CardActivityService {
 
     private static String safe(String s) {
         return s == null ? "" : s;
+    }
+
+    private static String preview(String s) {
+        String p = safe(s).trim();
+        if (p.length() > 120) {
+            p = p.substring(0, 120) + "…";
+        }
+        return p;
     }
 
     @Transactional
