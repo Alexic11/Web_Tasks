@@ -3,6 +3,7 @@ package carobnifrulas.web_tasks.card.label;
 import carobnifrulas.web_tasks.board.Board;
 import carobnifrulas.web_tasks.board.BoardMemberService;
 import carobnifrulas.web_tasks.board.BoardRepository;
+import carobnifrulas.web_tasks.board.BoardRealtimeBus;
 import carobnifrulas.web_tasks.card.Card;
 import carobnifrulas.web_tasks.card.CardRepository;
 import carobnifrulas.web_tasks.card.CardRealtimeBus;
@@ -110,7 +111,9 @@ public class CardLabelService {
         label.setColor(c);
         label.setCreatedBy(actorUserId);
 
-        return labels.save(label);
+        CardLabel saved = labels.save(label);
+        BoardRealtimeBus.publish(boardId, BoardRealtimeBus.ChangeType.LABELS);
+        return saved;
     }
 
     @Transactional
@@ -134,6 +137,7 @@ public class CardLabelService {
 
         activity.logLabelAssigned(cardId, actorUserId, label.getName());
         CardRealtimeBus.publish(cardId, CardRealtimeBus.ChangeType.ALL);
+        BoardRealtimeBus.publish(c.getBoardId(), BoardRealtimeBus.ChangeType.LABELS);
     }
 
     @Transactional
@@ -146,7 +150,7 @@ public class CardLabelService {
 
     @Transactional
     public void removeLabel(Long cardId, Long actorUserId, Long labelId) {
-        requireCardWritable(cardId, actorUserId);
+        Card c = requireCardWritable(cardId, actorUserId);
         CardLabel label = labels.findById(labelId)
                 .orElseThrow(() -> new IllegalStateException("Labela ne postoji."));
 
@@ -157,6 +161,7 @@ public class CardLabelService {
         assignments.deleteByIdCardIdAndIdLabelId(cardId, labelId);
         activity.logLabelRemoved(cardId, actorUserId, label.getName());
         CardRealtimeBus.publish(cardId, CardRealtimeBus.ChangeType.ALL);
+        BoardRealtimeBus.publish(c.getBoardId(), BoardRealtimeBus.ChangeType.LABELS);
     }
 
     @Transactional
@@ -167,6 +172,7 @@ public class CardLabelService {
         requireBoardWritable(label.getBoardId(), actorUserId);
         assignments.deleteByIdLabelId(labelId);
         labels.delete(label);
+        BoardRealtimeBus.publish(label.getBoardId(), BoardRealtimeBus.ChangeType.LABELS);
     }
 
     private Card requireCardAndAccess(Long cardId, Long actorUserId) {

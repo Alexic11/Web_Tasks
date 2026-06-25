@@ -2,6 +2,7 @@ package carobnifrulas.web_tasks.card.checklist;
 
 import carobnifrulas.web_tasks.board.BoardMemberService;
 import carobnifrulas.web_tasks.board.BoardRole;
+import carobnifrulas.web_tasks.board.BoardRealtimeBus;
 import carobnifrulas.web_tasks.card.Card;
 import carobnifrulas.web_tasks.card.CardRealtimeBus;
 import carobnifrulas.web_tasks.card.CardRepository;
@@ -90,6 +91,7 @@ public class CardChecklistService {
 
         activityService.logChecklistAdded(cardId, actorUserId, saved.getTitle());
         CardRealtimeBus.publish(cardId, CardRealtimeBus.ChangeType.ALL);
+        BoardRealtimeBus.publish(card.getBoardId(), BoardRealtimeBus.ChangeType.CHECKLIST);
 
         return saved;
     }
@@ -118,6 +120,7 @@ public class CardChecklistService {
 
         activityService.logChecklistStatusChanged(card.getId(), actorUserId, saved.getTitle(), done);
         CardRealtimeBus.publish(card.getId(), CardRealtimeBus.ChangeType.ALL);
+        BoardRealtimeBus.publish(card.getBoardId(), BoardRealtimeBus.ChangeType.CHECKLIST);
 
         return saved;
     }
@@ -133,6 +136,7 @@ public class CardChecklistService {
 
         activityService.logChecklistDeleted(card.getId(), actorUserId, title);
         CardRealtimeBus.publish(card.getId(), CardRealtimeBus.ChangeType.ALL);
+        BoardRealtimeBus.publish(card.getBoardId(), BoardRealtimeBus.ChangeType.CHECKLIST);
     }
 
     private CardChecklistItem requireItem(Long itemId) {

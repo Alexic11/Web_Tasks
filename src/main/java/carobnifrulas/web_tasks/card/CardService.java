@@ -1,6 +1,7 @@
 package carobnifrulas.web_tasks.card;
 
 import carobnifrulas.web_tasks.board.BoardMemberService;
+import carobnifrulas.web_tasks.board.BoardRealtimeBus;
 import carobnifrulas.web_tasks.card.activity.CardActivityService;
 import carobnifrulas.web_tasks.list.ListService;
 import carobnifrulas.web_tasks.notification.NotificationService;
@@ -65,6 +66,7 @@ public class CardService {
         cards.save(c);
 
         activity.logAssign(c.getId(), myUserId, myUserId);
+        BoardRealtimeBus.publish(c.getBoardId(), BoardRealtimeBus.ChangeType.CARD_CHANGED);
 
         // Ne šaljemo notifikaciju samom sebi kad klikne "Preuzmi"
     }
@@ -89,6 +91,7 @@ public class CardService {
         cards.save(c);
 
         activity.logUnassign(c.getId(), myUserId, oldAssignee);
+        BoardRealtimeBus.publish(c.getBoardId(), BoardRealtimeBus.ChangeType.CARD_CHANGED);
     }
 
     @Transactional
@@ -106,6 +109,7 @@ public class CardService {
         cards.save(c);
 
         activity.logMoveList(c.getId(), actorUserId, fromListId, targetListId);
+        BoardRealtimeBus.publish(c.getBoardId(), BoardRealtimeBus.ChangeType.CARD_MOVED);
     }
 
     @Transactional
@@ -113,6 +117,7 @@ public class CardService {
         Card c = requireById(cardId);
         c.setListId(targetListId);
         cards.save(c);
+        BoardRealtimeBus.publish(c.getBoardId(), BoardRealtimeBus.ChangeType.CARD_MOVED);
     }
 
     @Transactional
@@ -171,6 +176,8 @@ public class CardService {
         if (saved.getPriority() != null && saved.getPriority() != 1) {
             activity.logPriorityChange(saved.getId(), createdByUserId, 1, saved.getPriority());
         }
+
+        BoardRealtimeBus.publish(saved.getBoardId(), BoardRealtimeBus.ChangeType.CARD_CHANGED);
 
         return saved;
     }
@@ -240,6 +247,8 @@ public class CardService {
             activity.logUpdated(saved.getId(), actorUserId, "Promijenjeni detalji (naslov/opis).");
         }
 
+        BoardRealtimeBus.publish(saved.getBoardId(), BoardRealtimeBus.ChangeType.CARD_CHANGED);
+
         return saved;
     }
 
@@ -264,6 +273,7 @@ public class CardService {
             c.setListId(doneListId);
             cards.save(c);
             activity.logDone(c.getId(), actorUserId, fromListId, doneListId);
+            BoardRealtimeBus.publish(c.getBoardId(), BoardRealtimeBus.ChangeType.CARD_MOVED);
         }
     }
 
@@ -331,6 +341,8 @@ public class CardService {
         } else {
             activity.logReorder(moving.getId(), actorUserId, oldPos, newPos);
         }
+
+        BoardRealtimeBus.publish(moving.getBoardId(), BoardRealtimeBus.ChangeType.CARD_MOVED);
     }
 
     @Transactional

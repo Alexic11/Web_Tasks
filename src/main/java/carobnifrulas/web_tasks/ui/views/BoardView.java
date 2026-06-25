@@ -2,6 +2,7 @@ package carobnifrulas.web_tasks.ui.views;
 
 import carobnifrulas.web_tasks.board.BoardMemberRepository;
 import carobnifrulas.web_tasks.board.BoardRole;
+import carobnifrulas.web_tasks.board.BoardRealtimeBus;
 import carobnifrulas.web_tasks.card.Card;
 import carobnifrulas.web_tasks.card.checklist.CardChecklistService;
 import carobnifrulas.web_tasks.card.label.CardLabel;
@@ -29,6 +30,7 @@ import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.select.Select;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.data.value.ValueChangeMode;
+import com.vaadin.flow.shared.Registration;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -197,6 +199,12 @@ public class BoardView extends View {
         };
 
         add(buildFilterBar(assigneeLabel, boardLabels, count, refreshColumns));
+
+        Registration boardRealtimeRegistration = BoardRealtimeBus.register(boardId, changeType ->
+                getUI().ifPresent(ui -> ui.access(refreshColumns::run))
+        );
+
+        addDetachListener(e -> boardRealtimeRegistration.remove());
 
         refreshColumns.run();
 
