@@ -123,6 +123,7 @@ public class TaskDialog extends Dialog {
         boolean canWrite = myRole != BoardRole.VIEWER && !archived;
 
         setHeaderTitle(isEdit ? "Uredi task" : "Novi task");
+        addDialogCloseButton();
         setWidth("1040px");
         setMaxWidth("96vw");
         setHeight("780px");
@@ -1397,5 +1398,21 @@ public class TaskDialog extends Dialog {
         download.add(downloadBtn);
 
         return download;
+    }
+
+    private void addDialogCloseButton() {
+        Button closeButton = new Button(VaadinIcon.CLOSE_SMALL.create(), e -> close());
+
+        closeButton.addThemeVariants(
+                ButtonVariant.LUMO_TERTIARY_INLINE,
+                ButtonVariant.LUMO_ICON
+        );
+
+        closeButton.setAriaLabel("Zatvori");
+        closeButton.getStyle()
+                .set("margin-left", "auto")
+                .set("cursor", "pointer");
+
+        getHeader().add(closeButton);
     }
 }

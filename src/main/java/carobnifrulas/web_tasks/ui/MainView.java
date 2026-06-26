@@ -359,7 +359,7 @@ public class MainView extends AppLayout {
             try {
                 servicesHolder.notificationService.markAsRead(n.getId(), loggedUser.getId());
                 refreshNotificationBadge();
-                parentDialog.close();
+                //parentDialog.close();
                 openCardFromNotification(n.getBoardId(), n.getCardId());
             } catch (Exception ex) {
                 com.vaadin.flow.component.notification.Notification.show(ex.getMessage());
