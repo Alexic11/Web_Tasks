@@ -291,6 +291,19 @@ public class BoardView extends View {
         membersBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
         membersBtn.setVisible(canManageMembers && !archived);
 
+        Button archivedTasksBtn = new Button("Arhivirani taskovi", VaadinIcon.ARCHIVE.create());
+        archivedTasksBtn.addClickListener(e -> {
+            ArchivedCardsDialog dialog = new ArchivedCardsDialog(
+                    boardId,
+                    loggedUser.getId(),
+                    services,
+                    () -> MainView.getMainView().setContent(new BoardView(boardId, filterState.copy(), backTarget))
+            );
+            dialog.open();
+        });
+        archivedTasksBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+        archivedTasksBtn.setVisible(!archived);
+
         Button closeBoard = new Button("Zatvori", VaadinIcon.LOCK.create());
         closeBoard.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
         closeBoard.setVisible(canArchive);
@@ -336,7 +349,7 @@ public class BoardView extends View {
             cd.open();
         });
 
-        right.add(roleBadge, membersBtn, closeBoard);
+        right.add(roleBadge, archivedTasksBtn, membersBtn, closeBoard);
 
         HorizontalLayout top = new HorizontalLayout(left, right);
         top.setWidthFull();

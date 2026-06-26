@@ -49,6 +49,41 @@ public interface CardRepository extends JpaRepository<Card, Long> {
     List<MyTaskRow> findMyTasks(Long userId);
 
 
+    interface ArchivedCardRow {
+        Long getCardId();
+        String getTitle();
+        Integer getPriority();
+        java.time.LocalDateTime getDueAt();
+        java.time.LocalDateTime getArchivedAt();
+        Long getListId();
+        String getListTitle();
+        Long getAssigneeId();
+        String getAssigneeName();
+        String getAssigneeEmail();
+    }
+
+    @Query("""
+    select
+      c.id as cardId,
+      c.title as title,
+      c.priority as priority,
+      c.dueAt as dueAt,
+      c.archivedAt as archivedAt,
+      l.id as listId,
+      l.title as listTitle,
+      u.id as assigneeId,
+      u.fullName as assigneeName,
+      u.email as assigneeEmail
+    from Card c
+      join ListEntity l on l.id = c.listId
+      left join User u on u.id = c.assignedTo
+    where c.boardId = :boardId
+      and c.archivedAt is not null
+    order by c.archivedAt desc, c.id desc
+""")
+    List<ArchivedCardRow> findArchivedCardsForBoard(Long boardId);
+
+
 
     public interface TaskRow {
         Long getCardId();
@@ -83,6 +118,7 @@ public interface CardRepository extends JpaRepository<Card, Long> {
       join Board b on b.id = c.boardId
       left join User u on u.id = c.assignedTo
     where (:assigneeId is null or c.assignedTo = :assigneeId)
+      and c.archivedAt is null
 """)
     java.util.List<TaskRow> findTaskRows(Long assigneeId);
 

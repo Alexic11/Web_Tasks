@@ -1,6 +1,7 @@
 package carobnifrulas.web_tasks.card;
 
 import carobnifrulas.web_tasks.board.BoardMemberService;
+import carobnifrulas.web_tasks.board.BoardRepository;
 import carobnifrulas.web_tasks.board.BoardRealtimeBus;
 import carobnifrulas.web_tasks.card.activity.CardActivityService;
 import carobnifrulas.web_tasks.list.ListService;
@@ -18,6 +19,7 @@ import java.util.List;
 public class CardService {
 
     private final CardRepository cards;
+    private final BoardRepository boards;
     private final BoardMemberService boardMemberService;
     private final ListService lists;
     private final AppUserService userService;
@@ -25,12 +27,14 @@ public class CardService {
     private final NotificationService notificationService;
 
     public CardService(CardRepository cards,
+                       BoardRepository boards,
                        BoardMemberService boardMemberService,
                        ListService lists,
                        AppUserService userService,
                        CardActivityService activity,
                        NotificationService notificationService) {
         this.cards = cards;
+        this.boards = boards;
         this.boardMemberService = boardMemberService;
         this.lists = lists;
         this.userService = userService;
@@ -54,6 +58,7 @@ public class CardService {
     @Transactional
     public void assignToMe(Long cardId, Long myUserId) {
         Card c = requireById(cardId);
+        requireActiveCard(c);
 
         if (!canWriteOrGlobalAdmin(c.getBoardId(), myUserId)) {
             throw new IllegalStateException("Nemaš prava da mijenjaš task na ovom boardu.");
@@ -74,6 +79,7 @@ public class CardService {
     @Transactional
     public void unassign(Long cardId, Long myUserId) {
         Card c = requireById(cardId);
+        requireActiveCard(c);
 
         if (!canWriteOrGlobalAdmin(c.getBoardId(), myUserId)) {
             throw new IllegalStateException("Nemaš prava da mijenjaš task na ovom boardu.");
@@ -97,6 +103,7 @@ public class CardService {
     @Transactional
     public void moveToList(Long cardId, Long targetListId, Long actorUserId) {
         Card c = requireById(cardId);
+        requireActiveCard(c);
 
         if (!canWriteOrGlobalAdmin(c.getBoardId(), actorUserId)) {
             throw new IllegalStateException("Nemaš prava da mijenjaš task na ovom boardu.");
@@ -115,6 +122,7 @@ public class CardService {
     @Transactional
     public void moveToList(Long cardId, Long targetListId) {
         Card c = requireById(cardId);
+        requireActiveCard(c);
         c.setListId(targetListId);
         cards.save(c);
         BoardRealtimeBus.publish(c.getBoardId(), BoardRealtimeBus.ChangeType.CARD_MOVED);
@@ -129,6 +137,8 @@ public class CardService {
                            Integer priority,
                            Long assignedToUserId,
                            Long createdByUserId) {
+
+        requireActiveBoard(boardId);
 
         if (!canWriteOrGlobalAdmin(boardId, createdByUserId)) {
             throw new IllegalStateException("Nemaš prava da kreiraš task na ovom boardu.");
@@ -205,6 +215,7 @@ public class CardService {
 
         Card c = requireById(cardId);
         requireExpectedVersion(c, expectedVersion);
+        requireActiveCard(c);
 
         if (!canWriteOrGlobalAdmin(c.getBoardId(), actorUserId)) {
             throw new IllegalStateException("Nemaš prava da uređuješ task na ovom boardu.");
@@ -265,9 +276,69 @@ public class CardService {
         return saved;
     }
 
+
+    @Transactional(readOnly = true)
+    public List<CardRepository.ArchivedCardRow> listArchivedCardsForBoard(Long boardId, Long actorUserId) {
+        requireBoardAccess(boardId, actorUserId);
+        return cards.findArchivedCardsForBoard(boardId);
+    }
+
+    @Transactional
+    public Card archiveCard(Long cardId, Long actorUserId) {
+        return archiveCard(cardId, actorUserId, null);
+    }
+
+    @Transactional
+    public Card archiveCard(Long cardId, Long actorUserId, Long expectedVersion) {
+        Card c = requireById(cardId);
+        requireExpectedVersion(c, expectedVersion);
+
+        requireActiveBoard(c.getBoardId());
+
+        if (!canWriteOrGlobalAdmin(c.getBoardId(), actorUserId)) {
+            throw new IllegalStateException("Nemaš prava da arhiviraš task na ovom boardu.");
+        }
+
+        if (c.getArchivedAt() != null) {
+            throw new IllegalStateException("Task je već arhiviran.");
+        }
+
+        c.setArchivedAt(LocalDateTime.now());
+        Card saved = cards.save(c);
+
+        activity.logArchived(saved.getId(), actorUserId, saved.getTitle());
+        BoardRealtimeBus.publish(saved.getBoardId(), BoardRealtimeBus.ChangeType.CARD_CHANGED);
+
+        return saved;
+    }
+
+    @Transactional
+    public Card reopenCard(Long cardId, Long actorUserId) {
+        Card c = requireById(cardId);
+
+        requireActiveBoard(c.getBoardId());
+
+        if (!canWriteOrGlobalAdmin(c.getBoardId(), actorUserId)) {
+            throw new IllegalStateException("Nemaš prava da vratiš task iz arhive.");
+        }
+
+        if (c.getArchivedAt() == null) {
+            throw new IllegalStateException("Task nije arhiviran.");
+        }
+
+        c.setArchivedAt(null);
+        Card saved = cards.save(c);
+
+        activity.logReopened(saved.getId(), actorUserId, saved.getTitle());
+        BoardRealtimeBus.publish(saved.getBoardId(), BoardRealtimeBus.ChangeType.CARD_CHANGED);
+
+        return saved;
+    }
+
     @Transactional
     public void markDone(Long cardId, Long actorUserId) {
         Card c = requireById(cardId);
+        requireActiveCard(c);
 
         boolean globalAdmin = isGlobalAdmin(actorUserId);
 
@@ -302,6 +373,7 @@ public class CardService {
     @Transactional
     public void reorderWithinList(Long cardId, Long listId, int targetIndex, Long actorUserId) {
         Card moving = requireById(cardId);
+        requireActiveCard(moving);
 
         if (!canWriteOrGlobalAdmin(moving.getBoardId(), actorUserId)) {
             throw new IllegalStateException("Nemaš prava da mijenjaš task na ovom boardu.");
@@ -387,6 +459,29 @@ public class CardService {
             throw new TaskVersionConflictException(
                     "Task je u međuvremenu promijenjen od strane drugog korisnika. Osvježi task i pokušaj ponovo."
             );
+        }
+    }
+
+
+    private void requireActiveCard(Card card) {
+        if (card.getArchivedAt() != null) {
+            throw new IllegalStateException("Task je arhiviran. Prvo ga vrati iz arhive pa ga možeš mijenjati.");
+        }
+    }
+
+    private void requireBoardAccess(Long boardId, Long userId) {
+        if (isGlobalAdmin(userId)) {
+            return;
+        }
+        boardMemberService.requireMember(boardId, userId);
+    }
+
+    private void requireActiveBoard(Long boardId) {
+        var board = boards.findById(boardId)
+                .orElseThrow(() -> new IllegalStateException("Board ne postoji."));
+
+        if (board.getArchivedAt() != null) {
+            throw new IllegalStateException("Board je zatvoren. Taskovi se ne mogu mijenjati u History režimu.");
         }
     }
 

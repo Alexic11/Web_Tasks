@@ -17,6 +17,7 @@ import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.checkbox.Checkbox;
 import com.vaadin.flow.component.combobox.ComboBox;
+import com.vaadin.flow.component.confirmdialog.ConfirmDialog;
 import com.vaadin.flow.component.datepicker.DatePicker;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.grid.Grid;
@@ -26,6 +27,7 @@ import com.vaadin.flow.component.html.H3;
 import com.vaadin.flow.component.html.H4;
 import com.vaadin.flow.component.html.Paragraph;
 import com.vaadin.flow.component.html.Span;
+import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.messages.MessageInput;
 import com.vaadin.flow.component.messages.MessageList;
 import com.vaadin.flow.component.messages.MessageListItem;
@@ -200,8 +202,43 @@ public class TaskDialog extends Dialog {
         Button save = new Button("Sačuvaj");
         save.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
 
+        Button archive = new Button("Arhiviraj", VaadinIcon.ARCHIVE.create());
+        archive.addThemeVariants(ButtonVariant.LUMO_ERROR, ButtonVariant.LUMO_PRIMARY);
+        archive.setVisible(isEdit && canWrite);
+        archive.setEnabled(isEdit && canWrite);
+
+        archive.addClickListener(e -> {
+            ConfirmDialog cd = new ConfirmDialog();
+            cd.setHeader("Arhivirati task?");
+            cd.setText("Task neće biti trajno obrisan. Biće premješten u arhivu taskova i može se kasnije vratiti.");
+            cd.setCancelable(true);
+            cd.setConfirmText("Arhiviraj");
+            cd.setConfirmButtonTheme("error primary");
+
+            cd.addConfirmListener(ev -> {
+                try {
+                    services.cardService.archiveCard(existing.getId(), actorUserId, currentCardVersion);
+                    taskChanged = true;
+                    close();
+                    Notification.show("Task je arhiviran.");
+
+                    if (!hasTaskChangedCallback) {
+                        MainView.getMainView().setContent(new BoardView(boardId));
+                    }
+                } catch (Exception ex) {
+                    if (isTaskConflict(ex)) {
+                        handleTaskConflict(isEdit ? existing.getId() : null);
+                        return;
+                    }
+                    Notification.show(ex.getMessage(), 4000, Notification.Position.MIDDLE);
+                }
+            });
+
+            cd.open();
+        });
+
         Button cancel = new Button("Otkaži", e -> close());
-        cancel.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+        cancel.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
 
         save.setEnabled(canWrite);
 
@@ -253,7 +290,7 @@ public class TaskDialog extends Dialog {
             }
         });
 
-        HorizontalLayout actions = new HorizontalLayout(save, cancel);
+        HorizontalLayout actions = new HorizontalLayout(save, archive, cancel);
         actions.setSpacing(true);
 
         HorizontalLayout row2 = new HorizontalLayout(due, priority, assignedTo);
@@ -1001,7 +1038,7 @@ public class TaskDialog extends Dialog {
 
                 if (canWrite) {
                     Button delete = new Button("Obriši");
-                    delete.addThemeVariants(ButtonVariant.LUMO_ERROR);
+                    delete.addThemeVariants(ButtonVariant.LUMO_ERROR, ButtonVariant.LUMO_PRIMARY);
                     delete.addClickListener(e -> {
                         try {
                             services.cardChecklistService.deleteItem(item.getId(), actorUserId, currentCardVersion);
@@ -1263,7 +1300,7 @@ public class TaskDialog extends Dialog {
 
                 if (canWrite) {
                     Button deleteBtn = new Button("Obriši");
-                    deleteBtn.addThemeVariants(ButtonVariant.LUMO_ERROR);
+                    deleteBtn.addThemeVariants(ButtonVariant.LUMO_ERROR, ButtonVariant.LUMO_PRIMARY);
 
                     deleteBtn.addClickListener(e -> {
                         try {

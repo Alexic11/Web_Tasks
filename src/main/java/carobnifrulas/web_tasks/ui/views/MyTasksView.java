@@ -493,7 +493,10 @@ public class MyTasksView extends View implements MenuTab {
     private void openTask(Long cardId) {
         try {
             Card c = services.cardService.requireById(cardId);
-            TaskDialog.edit(services, c, loggedUser.getId()).open();
+            TaskDialog.edit(services, c, loggedUser.getId(), () -> {
+                refresh();
+                applyFiltersAndRender();
+            }).open();
         } catch (Exception ex) {
             Notification.show(ex.getMessage());
         }

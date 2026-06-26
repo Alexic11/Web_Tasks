@@ -29,6 +29,8 @@ public class CardActivityService {
     public static final String CHECKLIST_DELETED = "CHECKLIST_DELETED";
     public static final String LABEL_ASSIGNED = "LABEL_ASSIGNED";
     public static final String LABEL_REMOVED = "LABEL_REMOVED";
+    public static final String ARCHIVED = "ARCHIVED";
+    public static final String REOPENED = "REOPENED";
 
     private static final DateTimeFormatter DTF = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
 
@@ -119,6 +121,16 @@ public class CardActivityService {
     @Transactional
     public void logLabelRemoved(Long cardId, Long actorUserId, String labelName) {
         log(cardId, actorUserId, LABEL_REMOVED, preview(labelName), null);
+    }
+
+    @Transactional
+    public void logArchived(Long cardId, Long actorUserId, String title) {
+        log(cardId, actorUserId, ARCHIVED, preview(title), "ARCHIVED");
+    }
+
+    @Transactional
+    public void logReopened(Long cardId, Long actorUserId, String title) {
+        log(cardId, actorUserId, REOPENED, "ARCHIVED", preview(title));
     }
 
     private void log(Long cardId, Long actorUserId, String action, String oldValue, String newValue) {

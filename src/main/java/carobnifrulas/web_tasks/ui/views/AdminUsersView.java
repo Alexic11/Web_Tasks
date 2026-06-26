@@ -271,7 +271,9 @@ public class AdminUsersView extends View implements MenuTab {
         grid.addComponentColumn(u -> {
             Button del = new Button("Obriši");
             del.setIcon(VaadinIcon.TRASH.create());
-            del.addThemeVariants(ButtonVariant.LUMO_ERROR);
+            del.addThemeVariants(ButtonVariant.LUMO_ERROR, ButtonVariant.LUMO_PRIMARY);
+
+            //        archive.addThemeVariants(ButtonVariant.LUMO_ERROR, ButtonVariant.LUMO_PRIMARY);
 
             if (u.getEmail() != null && "admin@local".equalsIgnoreCase(u.getEmail())) {
                 del.setEnabled(false);
