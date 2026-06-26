@@ -560,7 +560,7 @@ public class TaskDialog extends Dialog {
         activityGrid.setWidthFull();
         activityGrid.setHeight("280px");
 
-        activityGrid.addColumn(a -> formatInstant(a.getCreatedAt()))
+        activityGrid.addColumn(a -> formatDateTime(a.getCreatedAt()))
                 .setHeader("Vrijeme")
                 .setAutoWidth(true)
                 .setFlexGrow(0);
@@ -1302,9 +1302,8 @@ public class TaskDialog extends Dialog {
         return s == null ? "" : s;
     }
 
-    private static String formatInstant(java.time.Instant ins) {
-        if (ins == null) return "—";
-        LocalDateTime dt = LocalDateTime.ofInstant(ins, ZoneId.systemDefault());
+    private static String formatDateTime(LocalDateTime dt) {
+        if (dt == null) return "—";
         return DT_FMT.format(dt);
     }
 

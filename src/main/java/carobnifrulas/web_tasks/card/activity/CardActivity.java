@@ -4,7 +4,7 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 
-import java.time.Instant;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "card_activity")
@@ -34,5 +34,5 @@ public class CardActivity {
     private String newValue;
 
     @Column(name = "created_at", insertable = false, updatable = false)
-    private Instant createdAt;
+    private LocalDateTime createdAt;
 }
