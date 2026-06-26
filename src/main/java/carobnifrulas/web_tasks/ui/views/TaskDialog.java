@@ -17,7 +17,7 @@ import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.checkbox.Checkbox;
 import com.vaadin.flow.component.combobox.ComboBox;
-import com.vaadin.flow.component.datetimepicker.DateTimePicker;
+import com.vaadin.flow.component.datepicker.DatePicker;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.html.Anchor;
@@ -44,6 +44,7 @@ import com.vaadin.flow.server.streams.UploadHandler;
 import com.vaadin.flow.shared.Registration;
 
 import java.io.ByteArrayInputStream;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -142,7 +143,7 @@ public class TaskDialog extends Dialog {
         desc.setMaxHeight("320px");
         desc.setPlaceholder("Unesi opis taska...");
 
-        DateTimePicker due = new DateTimePicker("Rok (opciono)");
+        DatePicker due = new DatePicker("Rok (opciono)");
         due.setWidth("280px");
 
         Select<Integer> priority = new Select<>();
@@ -184,7 +185,7 @@ public class TaskDialog extends Dialog {
         if (isEdit) {
             title.setValue(nullSafe(existing.getTitle()));
             desc.setValue(nullSafe(existing.getDescription()));
-            due.setValue(existing.getDueAt());
+            due.setValue(existing.getDueAt() == null ? null : existing.getDueAt().toLocalDate());
             assignedTo.setValue(existing.getAssignedTo());
             Integer p = existing.getPriority();
             priority.setValue(p == null ? 1 : p);
@@ -206,7 +207,7 @@ public class TaskDialog extends Dialog {
 
         save.addClickListener(e -> {
             try {
-                LocalDateTime dueVal = due.getValue();
+                LocalDateTime dueVal = endOfDueDate(due.getValue());
                 Long assigneeId = assignedTo.getValue();
                 Integer pr = priority.getValue();
 
@@ -366,6 +367,15 @@ public class TaskDialog extends Dialog {
 
     private static Long normalizeVersion(Long version) {
         return version == null ? 0L : version;
+    }
+
+    /**
+     * UI prima samo datum roka. U bazi i dalje čuvamo LocalDateTime,
+     * pa datum pretvaramo u kraj tog dana. Tako task nije overdue tokom
+     * samog dana roka, nego tek narednog dana.
+     */
+    private static LocalDateTime endOfDueDate(LocalDate date) {
+        return date == null ? null : date.atTime(23, 59);
     }
 
     private com.vaadin.flow.component.Component buildSectionHeader(String title, String subtitle) {

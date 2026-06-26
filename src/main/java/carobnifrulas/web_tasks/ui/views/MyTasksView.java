@@ -34,7 +34,7 @@ import java.util.Map;
 @org.springframework.stereotype.Component
 public class MyTasksView extends View implements MenuTab {
 
-    private static final DateTimeFormatter DT_FMT = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
+    private static final DateTimeFormatter DT_FMT = DateTimeFormatter.ofPattern("dd.MM.yyyy");
 
     private final FilterState filterState = new FilterState();
     private List<CardRepository.MyTaskRow> allRows = List.of();
@@ -194,7 +194,7 @@ public class MyTasksView extends View implements MenuTab {
         Integer prio = filterState.priority;
         boolean overdueOnly = filterState.overdueOnly;
 
-        LocalDateTime now = LocalDateTime.now();
+        LocalDate today = LocalDate.now();
 
         for (CardRepository.MyTaskRow r : source) {
             if (!tq.isEmpty()) {
@@ -219,7 +219,7 @@ public class MyTasksView extends View implements MenuTab {
             }
 
             if (overdueOnly) {
-                if (r.getDueAt() == null || !r.getDueAt().isBefore(now)) {
+                if (r.getDueAt() == null || !r.getDueAt().toLocalDate().isBefore(today)) {
                     continue;
                 }
             }
@@ -234,8 +234,6 @@ public class MyTasksView extends View implements MenuTab {
         summaryRow.removeAll();
 
         LocalDate today = LocalDate.now();
-        LocalDateTime now = LocalDateTime.now();
-
         int total = rows.size();
         int overdue = 0;
         int todayCount = 0;
@@ -251,7 +249,7 @@ public class MyTasksView extends View implements MenuTab {
             if (r.getDueAt() == null) {
                 noDue++;
             } else {
-                if (r.getDueAt().isBefore(now)) {
+                if (r.getDueAt().toLocalDate().isBefore(today)) {
                     overdue++;
                 }
                 if (r.getDueAt().toLocalDate().equals(today)) {
@@ -301,7 +299,6 @@ public class MyTasksView extends View implements MenuTab {
         sectionsWrap.removeAll();
 
         LocalDate today = LocalDate.now();
-        LocalDateTime now = LocalDateTime.now();
         LocalDate next7 = today.plusDays(7);
 
         List<CardRepository.MyTaskRow> overdueRows = new ArrayList<>();
@@ -314,7 +311,7 @@ public class MyTasksView extends View implements MenuTab {
 
             if (due == null) {
                 noDueRows.add(r);
-            } else if (due.isBefore(now)) {
+            } else if (due.toLocalDate().isBefore(today)) {
                 overdueRows.add(r);
             } else if (due.toLocalDate().equals(today)) {
                 todayRows.add(r);
@@ -547,7 +544,7 @@ public class MyTasksView extends View implements MenuTab {
                 .set("border-radius", "999px")
                 .set("background", "var(--lumo-contrast-5pct)");
 
-        if (dueAt != null && dueAt.isBefore(LocalDateTime.now())) {
+        if (dueAt != null && dueAt.toLocalDate().isBefore(LocalDate.now())) {
             s.getStyle()
                     .set("color", "var(--lumo-error-text-color)")
                     .set("font-weight", "700")

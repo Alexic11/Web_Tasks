@@ -32,6 +32,7 @@ import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.data.value.ValueChangeMode;
 import com.vaadin.flow.shared.Registration;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -72,7 +73,7 @@ public class BoardView extends View {
     }
 
     private static final DateTimeFormatter DT_FMT =
-            DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
+            DateTimeFormatter.ofPattern("dd.MM.yyyy");
 
     public BoardView(Long boardId) {
         this(boardId, new FilterState(), BackTarget.BOARDS);
@@ -466,7 +467,7 @@ public class BoardView extends View {
                 .set("box-shadow", "0 1px 4px rgba(0,0,0,0.04)")
                 .set("transition", "all 0.2s ease");
 
-        if (c.getDueAt() != null && c.getDueAt().isBefore(LocalDateTime.now())) {
+        if (c.getDueAt() != null && c.getDueAt().toLocalDate().isBefore(LocalDate.now())) {
             box.getStyle().set("background", "linear-gradient(to bottom right, var(--lumo-error-color-10pct), white)");
         }
 
@@ -749,7 +750,7 @@ public class BoardView extends View {
                 .set("border-radius", "999px")
                 .set("background", "var(--lumo-contrast-5pct)");
 
-        if (dueAt != null && dueAt.isBefore(LocalDateTime.now())) {
+        if (dueAt != null && dueAt.toLocalDate().isBefore(LocalDate.now())) {
             due.getStyle()
                     .set("color", "var(--lumo-error-text-color)")
                     .set("font-weight", "700")
@@ -942,7 +943,7 @@ public class BoardView extends View {
                 return false;
             }
 
-            if (!c.getDueAt().isBefore(LocalDateTime.now())) {
+            if (!c.getDueAt().toLocalDate().isBefore(LocalDate.now())) {
                 return false;
             }
 
