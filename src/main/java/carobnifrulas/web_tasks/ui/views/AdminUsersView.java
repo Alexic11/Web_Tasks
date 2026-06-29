@@ -10,7 +10,6 @@ import com.vaadin.flow.component.confirmdialog.ConfirmDialog;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.html.H2;
-import com.vaadin.flow.component.html.H4;
 import com.vaadin.flow.component.html.Paragraph;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.Icon;
@@ -18,14 +17,11 @@ import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.orderedlayout.FlexComponent;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
-import com.vaadin.flow.component.orderedlayout.Scroller;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.select.Select;
 import com.vaadin.flow.component.textfield.TextField;
-import com.vaadin.flow.component.checkbox.Checkbox;
 import com.vaadin.flow.data.value.ValueChangeMode;
 import com.vaadin.flow.dom.DomEventListener;
-
 
 import java.util.ArrayList;
 import java.util.List;
@@ -48,12 +44,14 @@ public class AdminUsersView extends View implements MenuTab {
         String emailQuery;
         String nameQuery;
         String mustChange; // null = svi, "DA", "NE"
+        String status;     // null = svi, "AKTIVAN", "NEAKTIVAN"
 
         void reset() {
             idQuery = "";
             emailQuery = "";
             nameQuery = "";
             mustChange = null;
+            status = null;
         }
     }
 
@@ -130,7 +128,7 @@ public class AdminUsersView extends View implements MenuTab {
         H2 title = new H2("Admin - Users");
         title.getStyle().set("margin", "0");
 
-        Paragraph subtitle = new Paragraph("Pregled korisnika, reset lozinki i kreiranje novih naloga.");
+        Paragraph subtitle = new Paragraph("Pregled korisnika, aktivacija/deaktivacija naloga, reset lozinki i kreiranje novih naloga.");
         subtitle.getStyle()
                 .set("margin", "0")
                 .set("color", "var(--lumo-secondary-text-color)");
@@ -162,7 +160,7 @@ public class AdminUsersView extends View implements MenuTab {
 
         TextField idSearch = new TextField();
         idSearch.setLabel("Search ID");
-        idSearch.setWidth("160px");
+        idSearch.setWidth("130px");
         idSearch.setClearButtonVisible(true);
         idSearch.setValue(filterState.idQuery == null ? "" : filterState.idQuery);
         idSearch.setValueChangeMode(ValueChangeMode.TIMEOUT);
@@ -170,7 +168,7 @@ public class AdminUsersView extends View implements MenuTab {
 
         TextField emailSearch = new TextField();
         emailSearch.setLabel("Search email");
-        emailSearch.setWidth("280px");
+        emailSearch.setWidth("260px");
         emailSearch.setClearButtonVisible(true);
         emailSearch.setValue(filterState.emailQuery == null ? "" : filterState.emailQuery);
         emailSearch.setValueChangeMode(ValueChangeMode.TIMEOUT);
@@ -178,7 +176,7 @@ public class AdminUsersView extends View implements MenuTab {
 
         TextField nameSearch = new TextField();
         nameSearch.setLabel("Search ime");
-        nameSearch.setWidth("260px");
+        nameSearch.setWidth("240px");
         nameSearch.setClearButtonVisible(true);
         nameSearch.setValue(filterState.nameQuery == null ? "" : filterState.nameQuery);
         nameSearch.setValueChangeMode(ValueChangeMode.TIMEOUT);
@@ -186,16 +184,24 @@ public class AdminUsersView extends View implements MenuTab {
 
         Select<String> must = new Select<>();
         must.setLabel("Mora promj. lozinku");
-        must.setWidth("220px");
+        must.setWidth("190px");
         must.setEmptySelectionAllowed(true);
         must.setEmptySelectionCaption("Svi");
         must.setItems("DA", "NE");
         must.setValue(filterState.mustChange);
 
+        Select<String> status = new Select<>();
+        status.setLabel("Status");
+        status.setWidth("170px");
+        status.setEmptySelectionAllowed(true);
+        status.setEmptySelectionCaption("Svi");
+        status.setItems("AKTIVAN", "NEAKTIVAN");
+        status.setValue(filterState.status);
+
         Button reset = new Button("Reset");
         reset.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
 
-        bar.add(idSearch, emailSearch, nameSearch, must, reset, count);
+        bar.add(idSearch, emailSearch, nameSearch, must, status, reset, count);
         bar.setFlexGrow(1, emailSearch);
 
         bar.getStyle()
@@ -225,12 +231,18 @@ public class AdminUsersView extends View implements MenuTab {
             applyFiltersAndRender();
         });
 
+        status.addValueChangeListener(e -> {
+            filterState.status = e.getValue();
+            applyFiltersAndRender();
+        });
+
         reset.addClickListener(e -> {
             filterState.reset();
             idSearch.setValue("");
             emailSearch.setValue("");
             nameSearch.setValue("");
             must.clear();
+            status.clear();
             applyFiltersAndRender();
         });
 
@@ -256,6 +268,11 @@ public class AdminUsersView extends View implements MenuTab {
                 .setAutoWidth(true)
                 .setFlexGrow(1);
 
+        grid.addComponentColumn(this::buildStatusBadge)
+                .setHeader("Status")
+                .setAutoWidth(true)
+                .setFlexGrow(0);
+
         grid.addComponentColumn(this::buildMustChangeBadge)
                 .setHeader("Mora promj. lozinku")
                 .setAutoWidth(true)
@@ -268,45 +285,63 @@ public class AdminUsersView extends View implements MenuTab {
             return reset;
         }).setHeader("Reset").setAutoWidth(true);
 
-        grid.addComponentColumn(u -> {
-            Button del = new Button("Obriši");
-            del.setIcon(VaadinIcon.TRASH.create());
-            del.addThemeVariants(ButtonVariant.LUMO_ERROR, ButtonVariant.LUMO_PRIMARY);
-
-            //        archive.addThemeVariants(ButtonVariant.LUMO_ERROR, ButtonVariant.LUMO_PRIMARY);
-
-            if (u.getEmail() != null && "admin@local".equalsIgnoreCase(u.getEmail())) {
-                del.setEnabled(false);
-                del.setTooltipText("Ne možeš obrisati admin nalog.");
-            }
-
-            del.addClickListener(e -> {
-                ConfirmDialog cd = new ConfirmDialog();
-                cd.setHeader("Potvrda brisanja");
-                cd.setText("Da li ste sigurni da želite obrisati korisnika: " + u.getEmail() + " ?");
-                cd.setCancelable(true);
-                cd.setCancelText("Otkaži");
-                cd.setConfirmText("Obriši");
-                cd.setConfirmButtonTheme("error primary");
-
-                cd.addConfirmListener(ev -> {
-                    try {
-                        services.userService.deleteUser(u.getId());
-                        refreshAllUsers();
-                        applyFiltersAndRender();
-                        Notification.show("Korisnik obrisan.");
-                    } catch (Exception ex) {
-                        Notification.show(ex.getMessage());
-                    }
-                });
-
-                cd.open();
-            });
-
-            return del;
-        }).setHeader("Brisanje").setAutoWidth(true);
+        grid.addComponentColumn(this::buildActiveToggleButton)
+                .setHeader("Aktivacija")
+                .setAutoWidth(true);
 
         grid.setAllRowsVisible(true);
+    }
+
+    private Component buildActiveToggleButton(User u) {
+        boolean active = u.isActive();
+
+        Button btn = new Button(active ? "Deaktiviraj" : "Aktiviraj");
+        btn.setIcon(active ? VaadinIcon.BAN.create() : VaadinIcon.CHECK_CIRCLE.create());
+
+        if (active) {
+            btn.addThemeVariants(ButtonVariant.LUMO_ERROR, ButtonVariant.LUMO_PRIMARY);
+        } else {
+            btn.addThemeVariants(ButtonVariant.LUMO_SUCCESS, ButtonVariant.LUMO_PRIMARY);
+        }
+
+        if (u.getEmail() != null && "admin@local".equalsIgnoreCase(u.getEmail())) {
+            btn.setEnabled(false);
+            btn.setTooltipText("Ne možeš deaktivirati admin nalog.");
+        }
+
+        if (loggedUser != null && loggedUser.getId() != null && loggedUser.getId().equals(u.getId())) {
+            btn.setEnabled(false);
+            btn.setTooltipText("Ne možeš deaktivirati svoj nalog dok si ulogovan.");
+        }
+
+        btn.addClickListener(e -> {
+            if (active) {
+                openDeactivateDialog(u);
+            } else {
+                openActivateDialog(u);
+            }
+        });
+
+        return btn;
+    }
+
+    private Component buildStatusBadge(User u) {
+        boolean active = u.isActive();
+
+        Span badge = new Span(active ? "AKTIVAN" : "NEAKTIVAN");
+        badge.getStyle()
+                .set("font-size", "var(--lumo-font-size-s)")
+                .set("font-weight", "700")
+                .set("padding", "3px 10px")
+                .set("border-radius", "999px")
+                .set("background", active
+                        ? "var(--lumo-success-color-10pct)"
+                        : "var(--lumo-contrast-10pct)")
+                .set("color", active
+                        ? "var(--lumo-success-text-color)"
+                        : "var(--lumo-secondary-text-color)");
+
+        return badge;
     }
 
     private Component buildMustChangeBadge(User u) {
@@ -340,6 +375,7 @@ public class AdminUsersView extends View implements MenuTab {
         String eq = filterState.emailQuery == null ? "" : filterState.emailQuery.trim().toLowerCase();
         String nq = filterState.nameQuery == null ? "" : filterState.nameQuery.trim().toLowerCase();
         String mustVal = filterState.mustChange;
+        String statusVal = filterState.status;
 
         List<User> filtered = new ArrayList<>();
 
@@ -365,6 +401,12 @@ public class AdminUsersView extends View implements MenuTab {
                 if ("NE".equals(mustVal) && m) continue;
             }
 
+            if (statusVal != null) {
+                boolean active = u.isActive();
+                if ("AKTIVAN".equals(statusVal) && !active) continue;
+                if ("NEAKTIVAN".equals(statusVal) && active) continue;
+            }
+
             filtered.add(u);
         }
 
@@ -377,15 +419,20 @@ public class AdminUsersView extends View implements MenuTab {
         summaryRow.removeAll();
 
         int total = filtered.size();
-        int mustChange = 0;
         int active = 0;
+        int inactive = 0;
+        int mustChange = 0;
         int admins = 0;
 
         for (User u : filtered) {
+            if (u.isActive()) {
+                active++;
+            } else {
+                inactive++;
+            }
+
             if (u.isMustChangePassword()) {
                 mustChange++;
-            } else {
-                active++;
             }
 
             if (u.getEmail() != null && "admin@local".equalsIgnoreCase(u.getEmail())) {
@@ -396,6 +443,7 @@ public class AdminUsersView extends View implements MenuTab {
         summaryRow.add(
                 buildSummaryCard("Ukupno", String.valueOf(total), "var(--lumo-primary-color-10pct)"),
                 buildSummaryCard("Aktivni", String.valueOf(active), "var(--lumo-success-color-10pct)"),
+                buildSummaryCard("Neaktivni", String.valueOf(inactive), "var(--lumo-contrast-10pct)"),
                 buildSummaryCard("Moraju promijeniti lozinku", String.valueOf(mustChange), "var(--lumo-warning-color-10pct)"),
                 buildSummaryCard("Admin nalozi", String.valueOf(admins), "var(--lumo-contrast-10pct)")
         );
@@ -427,6 +475,52 @@ public class AdminUsersView extends View implements MenuTab {
 
         card.add(valueSpan, labelSpan);
         return card;
+    }
+
+    private void openDeactivateDialog(User u) {
+        ConfirmDialog cd = new ConfirmDialog();
+        cd.setHeader("Deaktivirati korisnika?");
+        cd.setText("Korisnik više neće moći da se prijavi i neće se nuditi za nova dodavanja/dodjele. Historija ostaje sačuvana: " + u.getEmail());
+        cd.setCancelable(true);
+        cd.setCancelText("Otkaži");
+        cd.setConfirmText("Deaktiviraj");
+        cd.setConfirmButtonTheme("error primary");
+
+        cd.addConfirmListener(ev -> {
+            try {
+                services.userService.deactivateUser(u.getId(), loggedUser.getId());
+                refreshAllUsers();
+                applyFiltersAndRender();
+                Notification.show("Korisnik deaktiviran.");
+            } catch (Exception ex) {
+                Notification.show(ex.getMessage());
+            }
+        });
+
+        cd.open();
+    }
+
+    private void openActivateDialog(User u) {
+        ConfirmDialog cd = new ConfirmDialog();
+        cd.setHeader("Aktivirati korisnika?");
+        cd.setText("Korisnik će ponovo moći da se prijavi i da bude dodan/dodijeljen: " + u.getEmail());
+        cd.setCancelable(true);
+        cd.setCancelText("Otkaži");
+        cd.setConfirmText("Aktiviraj");
+        cd.setConfirmButtonTheme("success primary");
+
+        cd.addConfirmListener(ev -> {
+            try {
+                services.userService.activateUser(u.getId());
+                refreshAllUsers();
+                applyFiltersAndRender();
+                Notification.show("Korisnik aktiviran.");
+            } catch (Exception ex) {
+                Notification.show(ex.getMessage());
+            }
+        });
+
+        cd.open();
     }
 
     private void openAddDialog() {

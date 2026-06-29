@@ -21,12 +21,16 @@ public class AppUserService {
     }
 
     public User requireByEmail(String email) {
-        return users.findByEmail(email)
+        return users.findByEmailIgnoreCase(email)
                 .orElseThrow(() -> new IllegalStateException("User not found: " + email));
     }
 
     public List<User> findAllUsers() {
         return users.findAllByOrderByIdDesc();
+    }
+
+    public List<User> findActiveUsers() {
+        return users.findAllByActiveTrueOrderByFullNameAsc();
     }
 
     public boolean existsByEmail(String email) {
@@ -46,6 +50,7 @@ public class AppUserService {
         u.setFullName(fullName.trim());
         u.setPasswordHash(encoder.encode(tempPassword));
         u.setMustChangePassword(true);
+        u.setActive(true);
 
         users.save(u);
 
@@ -54,7 +59,7 @@ public class AppUserService {
 
     @Transactional
     public String resetPassword(Long userId) {
-        User u = users.findById(userId).orElseThrow();
+        User u = users.findById(userId).orElseThrow(() -> new IllegalStateException("User not found."));
         String tempPassword = generateTempPassword(10);
         u.setPasswordHash(encoder.encode(tempPassword));
         u.setMustChangePassword(true);
@@ -64,27 +69,78 @@ public class AppUserService {
 
     @Transactional
     public void changePassword(Long userId, String newPassword) {
-        User u = users.findById(userId).orElseThrow();
+        User u = users.findById(userId).orElseThrow(() -> new IllegalStateException("User not found."));
+
+        if (!u.isActive()) {
+            throw new IllegalStateException("Korisnički nalog je deaktiviran.");
+        }
+
         u.setPasswordHash(encoder.encode(newPassword));
         u.setMustChangePassword(false);
         users.save(u);
     }
 
-    // ✅ NOVO: brisanje usera
+    /**
+     * Stari hard delete više ne koristimo jer user može imati FK veze
+     * (board_members, taskovi, activity, komentari, notifikacije...).
+     * Zadržavamo metodu radi kompatibilnosti sa starim pozivima, ali ona sada radi soft deactivate.
+     */
     @Transactional
     public void deleteUser(Long userId) {
+        deactivateUser(userId, null);
+    }
+
+    @Transactional
+    public void deactivateUser(Long userId, Long actorUserId) {
         User u = users.findById(userId)
                 .orElseThrow(() -> new IllegalStateException("User not found."));
 
-        // blokiraj brisanje admin naloga
-        if (u.getEmail() != null && "admin@local".equalsIgnoreCase(u.getEmail())) {
-            throw new IllegalStateException("Ne možeš obrisati admin nalog.");
+        if (isSystemAdmin(u)) {
+            throw new IllegalStateException("Ne možeš deaktivirati admin nalog.");
         }
 
-        // NOTE:
-        // Ako imaš FK veze (board_members, cards, itd), ovdje može puknuti constraint.
-        // Tada ćemo dodati cleanup (brisanje board_members redova) ili soft delete.
-        users.delete(u);
+        if (actorUserId != null && actorUserId.equals(userId)) {
+            throw new IllegalStateException("Ne možeš deaktivirati svoj nalog dok si ulogovan.");
+        }
+
+        if (!u.isActive()) {
+            return;
+        }
+
+        u.setActive(false);
+        users.save(u);
+    }
+
+    @Transactional
+    public void activateUser(Long userId) {
+        User u = users.findById(userId)
+                .orElseThrow(() -> new IllegalStateException("User not found."));
+
+        if (u.isActive()) {
+            return;
+        }
+
+        u.setActive(true);
+        users.save(u);
+    }
+
+    public void requireActiveUser(Long userId) {
+        User u = users.findById(userId)
+                .orElseThrow(() -> new IllegalStateException("User not found."));
+
+        if (!u.isActive()) {
+            throw new IllegalStateException("Korisnički nalog je deaktiviran.");
+        }
+    }
+
+    public boolean isActiveUser(Long userId) {
+        return users.findById(userId)
+                .map(User::isActive)
+                .orElse(false);
+    }
+
+    private static boolean isSystemAdmin(User u) {
+        return u.getEmail() != null && "admin@local".equalsIgnoreCase(u.getEmail());
     }
 
     private static final String ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#";

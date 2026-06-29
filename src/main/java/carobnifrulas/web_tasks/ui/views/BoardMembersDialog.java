@@ -198,6 +198,11 @@ public class BoardMembersDialog extends Dialog {
                 .setAutoWidth(true)
                 .setFlexGrow(0);
 
+        grid.addComponentColumn(this::buildActiveBadge)
+                .setHeader("Status")
+                .setAutoWidth(true)
+                .setFlexGrow(0);
+
         grid.addComponentColumn(r -> {
             BoardRole current = BoardRole.valueOf(r.getRole());
 
@@ -310,6 +315,25 @@ public class BoardMembersDialog extends Dialog {
                     .set("background", "var(--lumo-contrast-5pct)")
                     .set("color", "var(--lumo-secondary-text-color)");
         }
+
+        return badge;
+    }
+
+    private com.vaadin.flow.component.Component buildActiveBadge(BoardMemberRepository.MemberRow row) {
+        boolean active = !Boolean.FALSE.equals(row.getActive());
+
+        Span badge = new Span(active ? "AKTIVAN" : "NEAKTIVAN");
+        badge.getStyle()
+                .set("font-size", "var(--lumo-font-size-s)")
+                .set("font-weight", "700")
+                .set("padding", "4px 10px")
+                .set("border-radius", "999px")
+                .set("background", active
+                        ? "var(--lumo-success-color-10pct)"
+                        : "var(--lumo-contrast-10pct)")
+                .set("color", active
+                        ? "var(--lumo-success-text-color)"
+                        : "var(--lumo-secondary-text-color)");
 
         return badge;
     }

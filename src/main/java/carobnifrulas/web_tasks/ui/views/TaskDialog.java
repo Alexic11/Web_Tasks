@@ -52,6 +52,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -169,18 +170,24 @@ public class TaskDialog extends Dialog {
         assignedTo.setPlaceholder("Nedodijeljeno");
         assignedTo.setClearButtonVisible(true);
 
-        List<BoardMemberRepository.AssigneeRow> rows = services.boardMemberService.listAssignees(boardId);
+        Map<Long, String> labels = new LinkedHashMap<>();
 
-        Map<Long, String> labels = rows.stream().collect(Collectors.toMap(
-                BoardMemberRepository.AssigneeRow::getUserId,
-                r -> {
-                    String name = (r.getFullName() == null || r.getFullName().isBlank()) ? "" : r.getFullName().trim();
-                    if (!name.isEmpty()) {
-                        return name + " (" + r.getEmail() + ")";
-                    }
-                    return r.getEmail();
+        // U izboru za novo dodjeljivanje nudimo samo aktivne članove boarda.
+        for (BoardMemberRepository.AssigneeRow r : services.boardMemberService.listActiveAssignees(boardId)) {
+            labels.put(r.getUserId(), assigneeLabel(r));
+        }
+
+        // Ako task već ima dodijeljenog korisnika koji je kasnije deaktiviran,
+        // moramo ga dodati u ComboBox da edit dialog može normalno otvoriti postojeći task.
+        // Servis i dalje blokira novu dodjelu deaktiviranom korisniku.
+        if (isEdit && existing.getAssignedTo() != null && !labels.containsKey(existing.getAssignedTo())) {
+            for (BoardMemberRepository.AssigneeRow r : services.boardMemberService.listAssignees(boardId)) {
+                if (existing.getAssignedTo().equals(r.getUserId())) {
+                    labels.put(r.getUserId(), assigneeLabel(r) + " (neaktivan)");
+                    break;
                 }
-        ));
+            }
+        }
 
         assignedTo.setItems(labels.keySet());
         assignedTo.setItemLabelGenerator(id -> labels.getOrDefault(id, String.valueOf(id)));
@@ -405,6 +412,14 @@ public class TaskDialog extends Dialog {
 
     private static Long normalizeVersion(Long version) {
         return version == null ? 0L : version;
+    }
+
+    private static String assigneeLabel(BoardMemberRepository.AssigneeRow r) {
+        String name = (r.getFullName() == null || r.getFullName().isBlank()) ? "" : r.getFullName().trim();
+        if (!name.isEmpty()) {
+            return name + " (" + r.getEmail() + ")";
+        }
+        return r.getEmail();
     }
 
     /**

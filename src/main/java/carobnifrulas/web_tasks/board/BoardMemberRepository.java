@@ -20,6 +20,7 @@ public interface BoardMemberRepository extends JpaRepository<BoardMember, BoardM
         select u.id as userId,
                u.email as email,
                u.fullName as fullName,
+               u.active as active,
                bm.role as role
         from BoardMember bm
         join User u on u.id = bm.id.userId
@@ -39,21 +40,39 @@ public interface BoardMemberRepository extends JpaRepository<BoardMember, BoardM
         Long getUserId();
         String getEmail();
         String getFullName();
+        Boolean getActive();
         String getRole(); // "OWNER"/"ADMIN"/...
     }
 
-    public interface AssigneeRow {
+    interface AssigneeRow {
         Long getUserId();
         String getFullName();
         String getEmail();
+        Boolean getActive();
     }
 
-    @org.springframework.data.jpa.repository.Query("""
-    select u.id as userId, u.fullName as fullName, u.email as email
-    from BoardMember bm
-    join User u on u.id = bm.id.userId
-    where bm.id.boardId = :boardId
-    order by u.fullName asc
-""")
-    java.util.List<AssigneeRow> findAssignees(Long boardId);
+    @Query("""
+        select u.id as userId,
+               u.fullName as fullName,
+               u.email as email,
+               u.active as active
+        from BoardMember bm
+        join User u on u.id = bm.id.userId
+        where bm.id.boardId = :boardId
+        order by u.fullName asc
+    """)
+    List<AssigneeRow> findAssignees(@Param("boardId") Long boardId);
+
+    @Query("""
+        select u.id as userId,
+               u.fullName as fullName,
+               u.email as email,
+               u.active as active
+        from BoardMember bm
+        join User u on u.id = bm.id.userId
+        where bm.id.boardId = :boardId
+          and u.active = true
+        order by u.fullName asc
+    """)
+    List<AssigneeRow> findActiveAssignees(@Param("boardId") Long boardId);
 }

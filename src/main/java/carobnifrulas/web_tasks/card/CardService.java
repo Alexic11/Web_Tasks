@@ -145,7 +145,7 @@ public class CardService {
         }
 
         if (assignedToUserId != null) {
-            boardMemberService.requireMember(boardId, assignedToUserId);
+            boardMemberService.requireActiveMember(boardId, assignedToUserId);
         }
 
         String t = normalizeTitle(title);
@@ -221,8 +221,8 @@ public class CardService {
             throw new IllegalStateException("Nemaš prava da uređuješ task na ovom boardu.");
         }
 
-        if (assignedToUserId != null) {
-            boardMemberService.requireMember(c.getBoardId(), assignedToUserId);
+        if (assignedToUserId != null && !eqLong(c.getAssignedTo(), assignedToUserId)) {
+            boardMemberService.requireActiveMember(c.getBoardId(), assignedToUserId);
         }
 
         Integer oldPr = c.getPriority();
