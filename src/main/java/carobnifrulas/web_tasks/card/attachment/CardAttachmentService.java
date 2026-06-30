@@ -5,6 +5,7 @@ import carobnifrulas.web_tasks.card.Card;
 import carobnifrulas.web_tasks.card.CardRealtimeBus;
 import carobnifrulas.web_tasks.card.CardRepository;
 import carobnifrulas.web_tasks.card.activity.CardActivityService;
+import carobnifrulas.web_tasks.security.model.SecurityUtils;
 import carobnifrulas.web_tasks.user.User;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -153,7 +154,7 @@ public class CardAttachmentService {
     }
 
     private boolean isGlobalAdmin(User user) {
-        return user.getEmail() != null && "admin@local".equalsIgnoreCase(user.getEmail());
+        return SecurityUtils.isGlobalAdmin(user);
     }
 
     public record DownloadableAttachment(CardAttachment attachment, Path path) {

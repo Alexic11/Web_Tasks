@@ -7,6 +7,7 @@ import carobnifrulas.web_tasks.card.activity.CardActivityService;
 import carobnifrulas.web_tasks.list.ListService;
 import carobnifrulas.web_tasks.notification.NotificationService;
 import carobnifrulas.web_tasks.security.model.AppUserService;
+import carobnifrulas.web_tasks.security.model.SecurityUtils;
 import carobnifrulas.web_tasks.user.User;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -109,6 +110,8 @@ public class CardService {
             throw new IllegalStateException("Nemaš prava da mijenjaš task na ovom boardu.");
         }
 
+        lists.requireListOnBoard(c.getBoardId(), targetListId);
+
         Long fromListId = c.getListId();
         if (fromListId != null && fromListId.equals(targetListId)) return;
 
@@ -116,15 +119,6 @@ public class CardService {
         cards.save(c);
 
         activity.logMoveList(c.getId(), actorUserId, fromListId, targetListId);
-        BoardRealtimeBus.publish(c.getBoardId(), BoardRealtimeBus.ChangeType.CARD_MOVED);
-    }
-
-    @Transactional
-    public void moveToList(Long cardId, Long targetListId) {
-        Card c = requireById(cardId);
-        requireActiveCard(c);
-        c.setListId(targetListId);
-        cards.save(c);
         BoardRealtimeBus.publish(c.getBoardId(), BoardRealtimeBus.ChangeType.CARD_MOVED);
     }
 
@@ -143,6 +137,8 @@ public class CardService {
         if (!canWriteOrGlobalAdmin(boardId, createdByUserId)) {
             throw new IllegalStateException("Nemaš prava da kreiraš task na ovom boardu.");
         }
+
+        lists.requireListOnBoard(boardId, listId);
 
         if (assignedToUserId != null) {
             boardMemberService.requireActiveMember(boardId, assignedToUserId);
@@ -366,7 +362,7 @@ public class CardService {
     }
 
     public List<CardRepository.TaskRow> listTaskRowsForDashboard(User loggedUser) {
-        boolean globalAdmin = "admin@local".equalsIgnoreCase(loggedUser.getEmail());
+        boolean globalAdmin = SecurityUtils.isGlobalAdmin(loggedUser);
         return cards.findTaskRows(globalAdmin ? null : loggedUser.getId());
     }
 
@@ -378,6 +374,8 @@ public class CardService {
         if (!canWriteOrGlobalAdmin(moving.getBoardId(), actorUserId)) {
             throw new IllegalStateException("Nemaš prava da mijenjaš task na ovom boardu.");
         }
+
+        lists.requireListOnBoard(moving.getBoardId(), listId);
 
         Long oldListId = moving.getListId();
         BigDecimal oldPos = moving.getPosition();
@@ -430,8 +428,7 @@ public class CardService {
         BoardRealtimeBus.publish(moving.getBoardId(), BoardRealtimeBus.ChangeType.CARD_MOVED);
     }
 
-    @Transactional
-    public void reindexList(Long listId) {
+    private void reindexList(Long listId) {
         List<Card> items = cards.findByListIdAndArchivedAtIsNullOrderByPositionAsc(listId);
         BigDecimal pos = new BigDecimal("1000.000000");
         for (Card c : items) {
@@ -487,7 +484,7 @@ public class CardService {
 
     private boolean isGlobalAdmin(Long userId) {
         return userService.findById(userId)
-                .map(u -> "admin@local".equalsIgnoreCase(u.getEmail()))
+                .map(SecurityUtils::isGlobalAdmin)
                 .orElse(false);
     }
 

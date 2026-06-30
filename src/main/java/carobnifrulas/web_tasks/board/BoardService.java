@@ -53,30 +53,6 @@ public class BoardService {
         return b;
     }
 
-//    public Board requireMemberBoard(Long boardId, Long userId) {
-//
-//        boolean globalAdmin = userService.findById(userId)
-//                .map(u -> "admin@local".equalsIgnoreCase(u.getEmail()))
-//                .orElse(false);
-//
-//        if (!globalAdmin) {
-//            members.findByIdBoardIdAndIdUserId(boardId, userId)
-//                    .orElseThrow(() -> new IllegalStateException("Nemaš pristup ovom boardu."));
-//        }
-//
-//        return boards.findById(boardId)
-//                .orElseThrow(() -> new IllegalStateException("Board ne postoji."));
-//    }
-
-
-//    public List<Board> listBoardsFor(User loggedUser) {
-//        boolean globalAdmin = "admin@local".equalsIgnoreCase(loggedUser.getEmail());
-//
-//        if (globalAdmin) {
-//            return boards.findAllByOrderByIdDesc(); // ili po name, kako želiš
-//        }
-//        return boards.findBoardsForUser(loggedUser.getId()); // tvoja postojeća logika
-//    }
 
 
     public Board requireMemberBoard(Long boardId, Long userId) {

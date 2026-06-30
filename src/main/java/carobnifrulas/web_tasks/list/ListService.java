@@ -55,6 +55,24 @@ public class ListService {
         createList(boardId, actorUserId, "Done");
     }
 
+    public ListEntity requireListOnBoard(Long boardId, Long listId) {
+        if (boardId == null) {
+            throw new IllegalStateException("Board je obavezan.");
+        }
+        if (listId == null) {
+            throw new IllegalStateException("Lista je obavezna.");
+        }
+
+        ListEntity list = lists.findById(listId)
+                .orElseThrow(() -> new IllegalStateException("Lista ne postoji."));
+
+        if (!boardId.equals(list.getBoardId())) {
+            throw new IllegalStateException("Lista ne pripada ovom boardu.");
+        }
+
+        return list;
+    }
+
     public Long requireLastListId(Long boardId) {
         return lists.findFirstByBoardIdOrderByPositionDesc(boardId)
                 .orElseThrow(() -> new IllegalStateException("Board nema nijednu listu."))

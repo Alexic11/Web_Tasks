@@ -16,8 +16,8 @@ public class UserPrincipal implements UserDetails {
     public UserPrincipal(User user) {
         this.user = user;
 
-        // MVP: svi su ROLE_USER, a admin@local je ROLE_ADMIN
-        if ("admin@local".equalsIgnoreCase(user.getEmail())) {
+        // MVP: svi su ROLE_USER, a konfigurisani global admin je ROLE_ADMIN
+        if (SecurityUtils.isGlobalAdmin(user)) {
             this.authorities = List.of(
                     new SimpleGrantedAuthority("ROLE_ADMIN"),
                     new SimpleGrantedAuthority("ROLE_USER")

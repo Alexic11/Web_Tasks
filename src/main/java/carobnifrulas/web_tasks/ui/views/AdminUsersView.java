@@ -1,5 +1,6 @@
 package carobnifrulas.web_tasks.ui.views;
 
+import carobnifrulas.web_tasks.security.model.SecurityUtils;
 import carobnifrulas.web_tasks.ui.MainView;
 import carobnifrulas.web_tasks.ui.menu.MenuTab;
 import carobnifrulas.web_tasks.user.User;
@@ -59,7 +60,7 @@ public class AdminUsersView extends View implements MenuTab {
     public void setElements() {
         add(buildHeaderSection());
 
-        if (!"admin@local".equalsIgnoreCase(loggedUser.getEmail())) {
+        if (!SecurityUtils.isGlobalAdmin(loggedUser)) {
             VerticalLayout denied = new VerticalLayout();
             denied.setPadding(false);
             denied.setSpacing(true);
@@ -304,7 +305,7 @@ public class AdminUsersView extends View implements MenuTab {
             btn.addThemeVariants(ButtonVariant.LUMO_SUCCESS, ButtonVariant.LUMO_PRIMARY);
         }
 
-        if (u.getEmail() != null && "admin@local".equalsIgnoreCase(u.getEmail())) {
+        if (SecurityUtils.isGlobalAdmin(u)) {
             btn.setEnabled(false);
             btn.setTooltipText("Ne možeš deaktivirati admin nalog.");
         }
@@ -435,7 +436,7 @@ public class AdminUsersView extends View implements MenuTab {
                 mustChange++;
             }
 
-            if (u.getEmail() != null && "admin@local".equalsIgnoreCase(u.getEmail())) {
+            if (SecurityUtils.isGlobalAdmin(u)) {
                 admins++;
             }
         }

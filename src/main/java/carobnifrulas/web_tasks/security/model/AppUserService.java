@@ -140,7 +140,7 @@ public class AppUserService {
     }
 
     private static boolean isSystemAdmin(User u) {
-        return u.getEmail() != null && "admin@local".equalsIgnoreCase(u.getEmail());
+        return SecurityUtils.isGlobalAdmin(u);
     }
 
     private static final String ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#";

@@ -1,5 +1,6 @@
 package carobnifrulas.web_tasks.board;
 
+import carobnifrulas.web_tasks.security.model.SecurityUtils;
 import carobnifrulas.web_tasks.user.User;
 import carobnifrulas.web_tasks.user.UserRepository;
 import org.springframework.stereotype.Service;
@@ -23,7 +24,7 @@ public class BoardMemberService {
 
     private boolean isGlobalAdmin(Long userId) {
         return users.findById(userId)
-                .map(u -> "admin@local".equalsIgnoreCase(u.getEmail()))
+                .map(SecurityUtils::isGlobalAdmin)
                 .orElse(false);
     }
 
@@ -145,8 +146,8 @@ public class BoardMemberService {
                 .collect(Collectors.toSet());
 
         return users.findAll().stream()
-                // isključi system admin
-                .filter(u -> !"admin@local".equalsIgnoreCase(u.getEmail()))
+                // isključi global admin nalog
+                .filter(u -> !SecurityUtils.isGlobalAdmin(u))
                 // isključi deaktivirane korisnike iz novog dodavanja na board
                 .filter(User::isActive)
                 // isključi već dodane članove

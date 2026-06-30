@@ -1,6 +1,7 @@
 package carobnifrulas.web_tasks.ui.views;
 
 import carobnifrulas.web_tasks.dashboard.DashboardService;
+import carobnifrulas.web_tasks.security.model.SecurityUtils;
 import carobnifrulas.web_tasks.dashboard.dto.BoardStatsDto;
 import carobnifrulas.web_tasks.ui.MainView;
 import carobnifrulas.web_tasks.ui.menu.MenuTab;
@@ -238,7 +239,7 @@ public class DashboardView extends View implements MenuTab {
 
     private java.util.List<BoardStatsDto> loadForTab(boolean archived) {
         var user = MainView.getMainView().getLoggedUser();
-        boolean isAdmin = user != null && "admin@local".equalsIgnoreCase(user.getEmail());
+        boolean isAdmin = SecurityUtils.isGlobalAdmin(user);
 
         if (isAdmin) {
             return archived ? service.getArchivedForAdmin() : service.getActiveForAdmin();

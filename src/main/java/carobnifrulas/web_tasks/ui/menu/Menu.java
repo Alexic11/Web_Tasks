@@ -1,5 +1,6 @@
 package carobnifrulas.web_tasks.ui.menu;
 
+import carobnifrulas.web_tasks.security.model.SecurityUtils;
 import carobnifrulas.web_tasks.ui.MainView;
 import carobnifrulas.web_tasks.ui.views.AdminUsersView;
 import carobnifrulas.web_tasks.ui.views.ArchivedBoardsView;
@@ -70,8 +71,7 @@ public class Menu {
             return false;
         }
 
-        String email = mv.getLoggedUser().getEmail();
-        return email != null && "admin@local".equalsIgnoreCase(email);
+        return SecurityUtils.isGlobalAdmin(mv.getLoggedUser());
     }
 
     private MenuTab tab(String name, VaadinIcon icon, DomEventListener click) {
