@@ -30,6 +30,8 @@ public class DashboardRepository {
     }
 
     private List<BoardStatsDto> fetchStatsForAdmin(boolean archived) {
+        String archivedCondition = archived ? "b.archivedAt IS NOT NULL" : "b.archivedAt IS NULL";
+
         return em.createQuery("""
             SELECT new carobnifrulas.web_tasks.dashboard.dto.BoardStatsDto(
                 b.id,
@@ -59,15 +61,15 @@ public class DashboardRepository {
             FROM carobnifrulas.web_tasks.board.Board b
             LEFT JOIN carobnifrulas.web_tasks.card.Card c ON c.boardId = b.id
             LEFT JOIN carobnifrulas.web_tasks.list.ListEntity l ON l.id = c.listId
-            WHERE (:archived = true AND b.archivedAt IS NOT NULL)
-               OR (:archived = false AND b.archivedAt IS NULL)
+            WHERE %s
             GROUP BY b.id, b.name
-        """, BoardStatsDto.class)
-                .setParameter("archived", archived)
+        """.formatted(archivedCondition), BoardStatsDto.class)
                 .getResultList();
     }
 
     private List<BoardStatsDto> fetchStatsForOwner(long userId, boolean archived) {
+        String archivedCondition = archived ? "b.archivedAt IS NOT NULL" : "b.archivedAt IS NULL";
+
         return em.createQuery("""
             SELECT new carobnifrulas.web_tasks.dashboard.dto.BoardStatsDto(
                 b.id,
@@ -99,12 +101,10 @@ public class DashboardRepository {
                 ON bm.id.boardId = b.id AND bm.id.userId = :userId AND bm.role = 'OWNER'
             LEFT JOIN carobnifrulas.web_tasks.card.Card c ON c.boardId = b.id
             LEFT JOIN carobnifrulas.web_tasks.list.ListEntity l ON l.id = c.listId
-            WHERE (:archived = true AND b.archivedAt IS NOT NULL)
-               OR (:archived = false AND b.archivedAt IS NULL)
+            WHERE %s
             GROUP BY b.id, b.name
-        """, BoardStatsDto.class)
+        """.formatted(archivedCondition), BoardStatsDto.class)
                 .setParameter("userId", userId)
-                .setParameter("archived", archived)
                 .getResultList();
     }
 }
