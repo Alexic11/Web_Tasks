@@ -60,19 +60,9 @@ public class NotificationService {
     public void markAllAsRead(Long userId) {
         requireUser(userId);
 
-        List<NotificationEntity> all = notifications.findTop20ByUserIdOrderByCreatedAtDesc(userId);
-        boolean changed = false;
+        int changed = notifications.markAllUnreadAsRead(userId, Instant.now());
 
-        for (NotificationEntity n : all) {
-            if (!n.isRead()) {
-                n.setRead(true);
-                n.setReadAt(Instant.now());
-                changed = true;
-            }
-        }
-
-        if (changed) {
-            notifications.saveAll(all);
+        if (changed > 0) {
             UserNotificationBus.publish(userId);
         }
     }
