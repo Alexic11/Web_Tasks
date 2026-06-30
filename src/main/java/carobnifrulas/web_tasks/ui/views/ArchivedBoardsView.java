@@ -19,14 +19,11 @@ import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.data.value.ValueChangeMode;
 import com.vaadin.flow.dom.DomEventListener;
 import com.vaadin.flow.component.textfield.TextField;
-import org.springframework.stereotype.Component;
-
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
-@Component
 public class ArchivedBoardsView extends View implements MenuTab {
 
     private static final DateTimeFormatter DT_FMT =

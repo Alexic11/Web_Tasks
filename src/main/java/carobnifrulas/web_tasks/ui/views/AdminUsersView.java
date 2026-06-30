@@ -29,7 +29,6 @@ import java.util.List;
 
 import static com.vaadin.flow.component.button.ButtonVariant.LUMO_PRIMARY;
 
-@org.springframework.stereotype.Component
 public class AdminUsersView extends View implements MenuTab {
 
     private final Grid<User> grid = new Grid<>(User.class, false);

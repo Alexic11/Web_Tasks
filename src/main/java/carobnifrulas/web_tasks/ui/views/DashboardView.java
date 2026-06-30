@@ -49,12 +49,6 @@ public class DashboardView extends View implements MenuTab {
     }
 
     @Override
-    public void prepare() {
-        removeAll();
-        setElements();
-    }
-
-    @Override
     public void setElements() {
         addClassName("dashboard-view");
         removeAll();
