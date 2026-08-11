@@ -147,3 +147,117 @@ Administrative functionality for managing application users.
 ![Admin View](docs/screenshots/admin-view.png)
 
 ---
+
+
+## ⚙️ Installation & Setup
+
+### Prerequisites
+
+Before running the application, make sure you have the following installed:
+
+- **Java 21**
+- **Maven**
+- **MySQL 8**
+- **Git**
+
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/Alexic11/Web_Tasks.git
+cd Web_Tasks
+```
+
+### 2. Create the Database
+
+Create a MySQL database named:
+
+```sql
+CREATE DATABASE task_app;
+```
+
+### 3. Configure Database Connection
+
+The application uses environment variables for database credentials.
+
+The following variables are supported:
+
+| Variable | Description | Default |
+|---|---|---|
+| `DB_URL` | MySQL connection URL | `jdbc:mysql://localhost:3306/task_app` |
+| `DB_USERNAME` | MySQL username | `root` |
+| `DB_PASSWORD` | MySQL password | No default password |
+
+For example:
+
+```text
+DB_USERNAME=root
+DB_PASSWORD=your_mysql_password
+```
+
+When running the application from IntelliJ IDEA, these values can be configured under:
+
+```text
+Run → Edit Configurations → Environment variables
+```
+
+Example:
+
+```text
+DB_USERNAME=root;DB_PASSWORD=your_mysql_password
+```
+
+> Database passwords and other sensitive credentials should never be committed to the repository.
+
+### 4. Build the Application
+
+Using the Maven Wrapper:
+
+```bash
+./mvnw clean install
+```
+
+On Windows Command Prompt:
+
+```cmd
+mvnw.cmd clean install
+```
+
+### 5. Run the Application
+
+Using Maven:
+
+```bash
+./mvnw spring-boot:run
+```
+
+Alternatively, run the following class directly from IntelliJ IDEA:
+
+```text
+carobnifrulas.web_tasks.WebTasksApplication
+```
+
+### 6. Open the Application
+
+Once the application has started successfully, open:
+
+```text
+http://localhost:9800
+```
+
+in your web browser.
+
+---
+
+## 🔐 Security Configuration
+
+Database credentials are configured through environment variables instead of being hardcoded in the source code.
+
+```properties
+spring.datasource.url=${DB_URL:jdbc:mysql://localhost:3306/task_app?useUnicode=true&characterEncoding=utf8&serverTimezone=Europe/Sarajevo}
+spring.datasource.username=${DB_USERNAME:root}
+spring.datasource.password=${DB_PASSWORD:}
+```
+
+This keeps environment-specific credentials outside the Git repository.
+
+---
