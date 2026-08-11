@@ -150,7 +150,6 @@ Administrative functionality for managing application users.
 
 ---
 
-
 ## ⚙️ Installation & Setup
 
 ### Prerequisites
@@ -207,7 +206,7 @@ The application uses environment variables for database credentials.
 The following variables are supported:
 
 | Variable | Description | Default |
-|---|---|---|
+| --- | --- | --- |
 | `DB_URL` | MySQL connection URL | `jdbc:mysql://localhost:3306/task_app` |
 | `DB_USERNAME` | MySQL username | `root` |
 | `DB_PASSWORD` | MySQL password | No default password |
@@ -284,5 +283,118 @@ spring.datasource.password=${DB_PASSWORD:}
 ```
 
 This keeps environment-specific credentials outside the Git repository.
+
+---
+
+## 🧪 Testing
+
+The project includes unit tests for core business logic using **JUnit 5** and **Mockito**.
+
+Currently covered areas include:
+
+- User creation with temporary passwords
+- Duplicate user validation
+- Board creation
+- Automatic OWNER assignment
+- Default board list initialization
+
+Run the test suite with:
+
+```bash
+./mvnw test
+```
+
+The project also uses **GitHub Actions** to automatically build and test the application on every push and pull request to the `main` branch.
+
+The current CI workflow runs the test suite using **Java 21** and Maven.
+
+---
+
+## 📁 Project Structure
+
+```text
+Web_Tasks/
+├── .github/
+│   └── workflows/
+│       └── build.yml
+│
+├── database/
+│   ├── schema.sql
+│   └── demo-data.sql
+│
+├── docs/
+│   └── screenshots/
+│
+├── src/
+│   ├── main/
+│   │   ├── java/
+│   │   │   └── carobnifrulas/
+│   │   │       └── web_tasks/
+│   │   └── resources/
+│   │
+│   └── test/
+│       └── java/
+│           └── carobnifrulas/
+│               └── web_tasks/
+│
+├── .gitignore
+├── mvnw
+├── mvnw.cmd
+├── pom.xml
+└── README.md
+```
+
+The application code is organized into domain-focused packages for boards, cards, lists, users, security, notifications, and UI views.
+
+The project follows a layered architecture where UI components delegate business operations to services, while persistence is handled through Spring Data JPA repositories.
+
+---
+
+## 🔄 Continuous Integration
+
+The repository includes a **GitHub Actions CI pipeline**.
+
+For every push or pull request targeting the `main` branch, GitHub Actions automatically:
+
+1. Checks out the repository
+2. Configures Java 21
+3. Configures the Maven environment
+4. Builds the project
+5. Executes the automated test suite
+
+The current build status is displayed at the top of this README.
+
+---
+
+## 🔭 Future Improvements
+
+Potential future improvements include:
+
+- Additional unit and integration test coverage
+- Docker-based local development environment
+- Database migrations with Flyway
+- REST API support for external integrations
+- Expanded notification features
+- Additional automated UI testing
+- Cloud deployment and production configuration
+
+---
+
+## 📄 Project Purpose
+
+Web Tasks was developed as a full-stack application demonstrating the implementation of a modern task management system using the Java ecosystem.
+
+The project demonstrates practical experience with:
+
+- Java and object-oriented application design
+- Spring Boot application architecture
+- Spring Security and authorization
+- Vaadin Flow server-side UI development
+- Relational database design with MySQL
+- JPA and Hibernate persistence
+- Role-based business rules
+- Unit testing with JUnit and Mockito
+- Git-based development workflow
+- Continuous integration with GitHub Actions
 
 ---
