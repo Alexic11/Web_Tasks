@@ -84,7 +84,11 @@ Web Tasks follows a layered application architecture:
 ┌─────────────────────────────┐
 │        MySQL Database       │
 └─────────────────────────────┘
+```
 
+The application uses **Vaadin Flow's server-side UI model**, with application logic handled by Spring services and persistent data managed through Spring Data JPA and Hibernate.
+
+---
 
 ## 📸 Screenshots
 
@@ -106,7 +110,7 @@ Overview of available boards and quick access to project workspaces.
 
 ### Kanban Board
 
-Tasks are organized into lists and managed through a Kanban-style interface.
+Tasks are organized into lists and managed through an interactive Kanban-style interface.
 
 ![Board View](docs/screenshots/board-view.png)
 
@@ -138,6 +142,8 @@ Board owners and administrators can manage members and board-level permissions.
 
 ### Administration
 
-Administrative view for user and system management.
+Administrative functionality for managing application users.
 
 ![Admin View](docs/screenshots/admin-view.png)
+
+---
