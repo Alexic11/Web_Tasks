@@ -1,5 +1,7 @@
 # Web Tasks
 
+[![Build and Test](https://github.com/Alexic11/Web_Tasks/actions/workflows/build.yml/badge.svg)](https://github.com/Alexic11/Web_Tasks/actions/workflows/build.yml)
+
 A full-stack task management application built with **Java, Spring Boot, Vaadin, Spring Security, and MySQL**.
 
 Web Tasks provides a Kanban-style workspace for organizing boards, lists, and tasks while supporting role-based collaboration, task assignments, comments, attachments, activity tracking, and administrative features.
