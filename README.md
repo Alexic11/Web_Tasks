@@ -167,13 +167,36 @@ git clone https://github.com/Alexic11/Web_Tasks.git
 cd Web_Tasks
 ```
 
-### 2. Create the Database
+### 2. Initialize the Database
 
-Create a MySQL database named:
+The project includes SQL scripts for creating the database structure and optional demo data.
 
-```sql
-CREATE DATABASE task_app;
+Run the scripts in the following order:
+
+```text
+database/schema.sql
+database/demo-data.sql
 ```
+
+The first script creates the `task_app` database and all required tables.
+
+The second script inserts demo users, a sample board, Kanban lists, tasks, labels, comments, checklist items, activity history, and notifications.
+
+Demo credentials:
+
+```text
+Administrator
+Email: admin@local
+Password: admin123
+```
+
+```text
+Board Owner
+Email: owner@example.com
+Password: demo123
+```
+
+The demo data is intended only for local development and portfolio demonstration.
 
 ### 3. Configure Database Connection
 
