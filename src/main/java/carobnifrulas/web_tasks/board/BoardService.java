@@ -44,8 +44,7 @@ public class BoardService {
 
         BoardMember bm = new BoardMember();
         bm.setId(id);
-//        bm.setRole("OWNER");
-//        members.save(bm);
+
         bm.setRole("OWNER");
         members.save(bm);
         listService.createDefaultListsIfMissing(b.getId(), creatorUserId);
