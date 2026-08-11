@@ -84,3 +84,60 @@ Web Tasks follows a layered application architecture:
 ┌─────────────────────────────┐
 │        MySQL Database       │
 └─────────────────────────────┘
+
+
+## 📸 Screenshots
+
+### Dashboard
+
+Overview of boards, task statistics, and important project information.
+
+![Dashboard](docs/screenshots/dashboard.png)
+
+---
+
+### Boards Overview
+
+Overview of available boards and quick access to project workspaces.
+
+![Boards View](docs/screenshots/boards-view.png)
+
+---
+
+### Kanban Board
+
+Tasks are organized into lists and managed through a Kanban-style interface.
+
+![Board View](docs/screenshots/board-view.png)
+
+---
+
+### Task Details
+
+Tasks support detailed descriptions, priorities, assignees, due dates, comments, attachments, and activity tracking.
+
+![Task Details](docs/screenshots/task-details.png)
+
+---
+
+### My Tasks
+
+Personal task overview showing tasks assigned to the currently logged-in user.
+
+![My Tasks](docs/screenshots/my-tasks.png)
+
+---
+
+### Board Members & Roles
+
+Board owners and administrators can manage members and board-level permissions.
+
+![Board Members](docs/screenshots/board-members.png)
+
+---
+
+### Administration
+
+Administrative view for user and system management.
+
+![Admin View](docs/screenshots/admin-view.png)
